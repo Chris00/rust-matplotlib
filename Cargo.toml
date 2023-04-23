@@ -1,0 +1,12 @@
+[package]
+name = "matplotlib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+numpy = "0.18.0"
+
+
+[dependencies.pyo3]
+version = "0.18.2"
+features = ["auto-initialize"]
