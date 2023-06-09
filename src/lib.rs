@@ -1,9 +1,9 @@
 use std::{path::Path,
-          fmt::{Display, Formatter}};
+          fmt::{Display, Formatter}, mem::swap};
 
 use pyo3::{prelude::*,
            exceptions::{PyFileNotFoundError, PyPermissionError},
-           types::PyTuple, intern};
+           types::{PyTuple, IntoPyDict, PyDict, PyList}, intern};
 use numpy::{PyArray1, PyArray2};
 
 macro_rules! py  {
@@ -12,7 +12,7 @@ macro_rules! py  {
     };
 }
 
-macro_rules! unit_meth {
+macro_rules! meth {
     ($obj: expr, $m: ident, $py: ident -> $args: expr,
      $e: ident -> $err: expr) => {
         Python::with_gil(|py| {
@@ -21,10 +21,21 @@ macro_rules! unit_meth {
                 .map_err(|$e| $err)
         })
     };
+    ($obj: expr, $m: ident, $py: ident -> $args: expr, $kwargs: expr) => {
+        Python::with_gil(|py| {
+            let $py = py;
+            $obj.call_method(py, intern!(py, stringify!($m)), $args, $kwargs)
+        })
+    };
     ($obj: expr, $m: ident, $py: ident -> $args: expr) => {
         Python::with_gil(|py| {
             let $py = py;
             $obj.call_method1(py, intern!(py, stringify!($m)), $args)
+        })
+    };
+    ($obj: expr, $m: ident, $args: expr, $kwargs: expr) => {
+        Python::with_gil(|py| {
+            $obj.call_method(py, intern!(py, stringify!($m)), $args, $kwargs)
         })
     };
     ($obj: expr, $m: ident, $args: expr) => {
@@ -111,20 +122,24 @@ pub struct Plot {}
 
 #[derive(Clone)]
 pub struct Axes {
-    axes: PyObject,
+    ax: PyObject,
     numpy: Numpy,
 }
 
 impl Axes {
-    fn new(py: Python, axes: PyObject) -> Self {
-        Self { axes,  numpy: Numpy::new(py).unwrap() }
+    fn new(py: Python, ax: PyObject) -> Self {
+        Self { ax,  numpy: Numpy::new(py).unwrap() }
     }
 }
 
 
 pub struct Figure {
-    plt: Py<PyModule>,
+    plt: Py<PyModule>, // module matplotlib.pyplot
     figure: PyObject,
+}
+
+pub struct Line2D {
+    line2d: Py<PyList>,
 }
 
 #[inline(always)]
@@ -187,24 +202,37 @@ impl Plot {
 }
 
 impl Axes {
-    /// Plot the points `x` `y`
-    pub fn plot<D>(&mut self, x: &D, y: &D, options: &str) -> &mut Self
+    /// Plot `y` versus `x` as lines and/or markers.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib::Plot;
+    /// let (fig, [[mut ax]]) = Plot::sub()?;
+    /// ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
+    /// fig.savefig("XY_plot.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    // FIXME: Do we want to check that `x` and `y` have the same
+    // dimension?  Better error message?
+    #[must_use]
+    pub fn xy<'a, D>(&'a mut self, x: &'a D, y: &'a D) -> XY<'a, D>
     where D: Data + ?Sized {
-        // FIXME: Do we want to check that `x` and `y` have the same
-        // dimension?  Better error message?
-        unit_meth!(self.axes, plot, py -> {
-            let xn = x.to_numpy(py, &self.numpy);
-            let yn = y.to_numpy(py, &self.numpy);
-            (xn, yn, options) })
-            .unwrap();
-        self
+        // The chain leading to plot starts with the data (using this
+        // function) so that additional data may be added, sharing
+        // common options.  We also mutably borrow `self` to reflect that
+        // the final `.plot()` will mutate the underlying Python object.
+        XY { axes: self,
+             options: PlotOptions::new(),
+             data: PlotData::XY(x, y),
+             prev_data: vec![] }
     }
 
     pub fn scatter<D>(&mut self, x: &D, y: &D) -> &mut Self
     where D: Data + ?Sized {
         // FIXME: Do we want to check that `x` and `y` have the same
         // dimension?  Better error message?
-        unit_meth!(self.axes, scatter, py -> {
+        meth!(self.ax, scatter, py -> {
             let xn = x.to_numpy(py, &self.numpy);
             let yn = y.to_numpy(py, &self.numpy);
             (xn, yn) })
@@ -213,32 +241,173 @@ impl Axes {
     }
 
     pub fn set_title(&mut self, v: &str) -> &mut Self {
-        unit_meth!(self.axes, set_title, (v,)).unwrap();
+        meth!(self.ax, set_title, (v,)).unwrap();
         self
     }
 
     /// Set the yaxis' scale.  Possible values for `v` are "linear",
     /// "log", "symlog", "logit",...
     pub fn set_yscale(&mut self, v: &str) -> &mut Self {
-        unit_meth!(self.axes, set_yscale, (v,)).unwrap();
+        meth!(self.ax, set_yscale, (v,)).unwrap();
         self
     }
 
     pub fn grid(&mut self) -> &mut Self {
-        unit_meth!(self.axes, grid, (true,)).unwrap();
+        meth!(self.ax, grid, (true,)).unwrap();
         self
     }
 
     pub fn set_xlabel(&mut self, label: &str) -> &mut Self {
-        unit_meth!(self.axes, set_xlabel, (label,)).unwrap();
+        meth!(self.ax, set_xlabel, (label,)).unwrap();
         self
     }
 
     pub fn set_ylabel(&mut self, label: &str) -> &mut Self {
-        unit_meth!(self.axes, set_ylabel, (label,)).unwrap();
+        meth!(self.ax, set_ylabel, (label,)).unwrap();
+        self
+    }
+
+    pub fn legend(&mut self) {
+        meth!(self.ax, legend, ()).unwrap();
+    }
+}
+
+#[derive(Clone)]
+struct PlotOptions<'a> {
+    fmt: &'a str,
+    animated: bool,
+    antialiased: bool,
+    label: &'a str,
+    linewidth: Option<f64>,
+}
+
+impl<'a> PlotOptions<'a> {
+    fn new() -> PlotOptions<'static> {
+        PlotOptions { fmt: "", animated: false, antialiased: true,
+                      label: "", linewidth: None }
+    }
+
+    fn kwargs(&'a self, py: Python<'a>) -> &'a PyDict {
+        let kwargs = PyDict::new(py);
+        if self.animated {
+            kwargs.set_item("animated", true).unwrap()
+        }
+        kwargs.set_item("antialiased", self.antialiased).unwrap();
+        if !self.label.is_empty() {
+            kwargs.set_item("label", self.label).unwrap()
+        }
+        if let Some(w) = self.linewidth {
+            kwargs.set_item("linewidth", w).unwrap()
+        }
+        kwargs
+    }
+}
+
+enum PlotData<'a, D>
+where D: ?Sized {
+    XY(&'a D, &'a D),
+    Y(&'a D),
+}
+
+pub struct XY<'a, D>
+where D: ?Sized {
+    axes: &'a Axes,
+    // Latest data and its setting.
+    options: PlotOptions<'a>,
+    data: PlotData<'a, D>,
+    // Previous data with their settings.
+    prev_data: Vec<(PlotOptions<'a>, PlotData<'a, D>)>,
+}
+
+impl<'a, D> XY<'a, D>
+where D: Data + ?Sized {
+    /// Plot the data with the options specified in [`XY`].
+    pub fn plot(&self) {
+        Python::with_gil(|py| {
+            for (opt, data) in self.prev_data.iter() {
+                Self::plot_data(py, self.axes, opt, data)
+            }
+            Self::plot_data(py, self.axes, &self.options, &self.data)
+        })
+    }
+
+    /// Plot a single dataset.
+    fn plot_data(py: Python<'_>, axes: &Axes,
+                 opt: &PlotOptions<'_>, data: &PlotData<'_, D>) {
+        match data {
+            PlotData::XY(x, y) => {
+                let xn = x.to_numpy(py, &axes.numpy);
+                let yn = y.to_numpy(py, &axes.numpy);
+                axes.ax.call_method(py, "plot", (xn, yn, opt.fmt),
+                                    Some(opt.kwargs(py)))
+                    .unwrap();
+            }
+            PlotData::Y(y) => {
+                let yn = y.to_numpy(py, &axes.numpy);
+                axes.ax.call_method(py, "plot", (yn, opt.fmt),
+                                    Some(opt.kwargs(py)))
+                    .unwrap();
+            }
+        }
+    }
+
+    /// Add the dataset (`x`, `y`).
+    #[must_use]
+    pub fn xy(&mut self, x: &'a D, y: &'a D) -> &mut Self {
+        let mut data = PlotData::XY(x, y);
+        swap(&mut data, &mut self.data);
+        self.prev_data.push((self.options.clone(), data));
+        self
+    }
+
+    #[must_use]
+    pub fn fmt(&mut self, fmt: &'a str) -> &mut Self {
+        self.options.fmt = fmt;
+        self
+    }
+
+    #[must_use]
+    pub fn animated(&mut self) -> &mut Self {
+        self.options.animated = true;
+        self
+    }
+
+    #[must_use]
+    pub fn antialiased(&mut self, b: bool) -> &mut Self {
+        self.options.antialiased = b;
+        self
+    }
+
+    #[must_use]
+    pub fn label(&mut self, label: &'a str) -> &mut Self {
+        self.options.label = label;
+        self
+    }
+
+    #[must_use]
+    pub fn linewidth(&mut self, w: f64) -> &mut Self {
+        self.options.linewidth = Some(w);
         self
     }
 }
+
+impl Line2D {
+    fn set_kw<'a, I>(&'a self, kwargs: I) -> &'a Self
+    where I: IntoPyDict {
+        Python::with_gil(|py| {
+            let kwargs = Some(kwargs.into_py_dict(py));
+            for l in self.line2d.as_ref(py).iter() {
+                l.call_method("set", (), kwargs).unwrap();
+            }
+        });
+        self
+    }
+
+    fn label(&self, label: &str) -> &Self {
+        self.set_kw([("label", label)])
+    }
+}
+
 
 impl Figure {
     // Attach to Plot ??
@@ -253,7 +422,7 @@ impl Figure {
     }
 
     pub fn savefig(self, path: impl AsRef<Path>) -> Result<(), Error> {
-        unit_meth!(self.figure, savefig, py -> (path.as_ref(),), e -> {
+        meth!(self.figure, savefig, py -> (path.as_ref(),), e -> {
             if e.is_instance_of::<PyFileNotFoundError>(py) {
                 Error::FileNotFoundError
             } else if e.is_instance_of::<PyPermissionError>(py) {
@@ -280,7 +449,7 @@ mod tests {
     #[test]
     fn a_basic_pdf() -> Result<(), Error> {
         let (fig, [[mut ax]]) = Plot::sub()?;
-        ax.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], "");
+        ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         fig.savefig("target/a_basic.pdf")?;
         Ok(())
     }
@@ -288,8 +457,8 @@ mod tests {
     #[test]
     fn a_basic_row() -> Result<(), Error> {
         let (fig, [[mut ax0, mut ax1]]) = Plot::sub()?;
-        ax0.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], "");
-        ax1.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], ".");
+        ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
+        ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
         fig.savefig("target/a_basic_row.pdf")?;
         Ok(())
     }
@@ -297,8 +466,8 @@ mod tests {
     #[test]
     fn a_basic_col() -> Result<(), Error> {
         let (fig, [[mut ax0], [mut ax1]]) = Plot::sub()?;
-        ax0.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], "");
-        ax1.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], ".");
+        ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
+        ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
         fig.savefig("target/a_basic_col.pdf")?;
         Ok(())
     }
@@ -307,10 +476,10 @@ mod tests {
     fn a_basic_grid() -> Result<(), Error> {
         let (fig, [[mut ax0, mut ax1],
                    [mut ax2, mut ax3]]) = Plot::sub()?;
-        ax0.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], "");
-        ax1.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], ".");
-        ax2.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], "r");
-        ax3.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], "r.");
+        ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
+        ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
+        ax2.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt("r").plot();
+        ax3.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt("r.").plot();
         fig.savefig("target/a_basic_grid.pdf")?;
         Ok(())
     }

@@ -24,7 +24,7 @@ Example
 
 ```rust
 let (fig, [[mut ax]]) = Plot::sub()?;
-ax.plot(&[1., 2., 3., 4.], &[1., 4., 2., 3.], "");
+ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
 fig.savefig("plot.pdf")?;
 ```
 
