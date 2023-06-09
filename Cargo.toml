@@ -2,6 +2,14 @@
 name = "matplotlib"
 version = "0.1.0"
 edition = "2021"
+authors = ["Christophe Troestler <christophe.troestler@umons.ac.be>"]
+description = "Binding to Python Matplotlib"
+homepage = "https://github.com/Chris00/rust-matplotlib"
+repository = "https://github.com/Chris00/rust-matplotlib.git"
+documentation = "https://docs.rs/matplotlib"
+license = "MIT"
+keywords = ["plot", "graph", "curve", "surface"]
+categories = ["science", "visualization", "mathematics", "graphics"]
 
 [dependencies]
 numpy = "0.18.0"
