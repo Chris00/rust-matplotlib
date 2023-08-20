@@ -6,6 +6,9 @@ use pyo3::{prelude::*,
            types::{PyTuple, IntoPyDict, PyDict, PyList}, intern};
 use numpy::{PyArray1, PyArray2};
 
+#[cfg(feature = "curve-sampling")]
+use curve_sampling::Sampling;
+
 macro_rules! py  {
     ($py: ident, $lib: expr, $f: ident) => {
         $lib.getattr($py, intern!($py, stringify!($f))).unwrap()
@@ -248,6 +251,26 @@ impl Axes {
              prev_data: vec![] }
     }
 
+    #[cfg(feature = "curve-sampling")]
+    /// Plot the graph of the function `f`.
+    ///
+    /// # Example
+    /// ```
+    /// use matplotlib::Plot;
+    /// let (fig, [[mut ax]]) = Plot::sub()?;
+    /// ax.fun(|x| x * x, 0., 1.).plot();
+    /// fig.savefig("target/Fun_plot.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    pub fn fun<'a, F>(&'a mut self, f: F, a: f64, b: f64) -> Fun<'a, F>
+    where F: FnMut(f64) -> f64 {
+        Fun { axes: self,
+              options: PlotOptions::new(),
+              f, a, b,
+              n: 100 }
+    }
+
+
     pub fn scatter<D>(&mut self, x: &D, y: &D) -> &mut Self
     where D: Data + ?Sized {
         // FIXME: Do we want to check that `x` and `y` have the same
@@ -323,6 +346,38 @@ impl<'a> PlotOptions<'a> {
     }
 }
 
+macro_rules! set_plotoptions { () => {
+    #[must_use]
+    pub fn fmt(&mut self, fmt: &'a str) -> &mut Self {
+        self.options.fmt = fmt;
+        self
+    }
+
+    #[must_use]
+    pub fn animated(&mut self) -> &mut Self {
+        self.options.animated = true;
+        self
+    }
+
+    #[must_use]
+    pub fn antialiased(&mut self, b: bool) -> &mut Self {
+        self.options.antialiased = b;
+        self
+    }
+
+    #[must_use]
+    pub fn label(&mut self, label: &'a str) -> &mut Self {
+        self.options.label = label;
+        self
+    }
+
+    #[must_use]
+    pub fn linewidth(&mut self, w: f64) -> &mut Self {
+        self.options.linewidth = Some(w);
+        self
+    }
+}}
+
 enum PlotData<'a, D>
 where D: ?Sized {
     XY(&'a D, &'a D),
@@ -341,6 +396,8 @@ where D: ?Sized {
 
 impl<'a, D> XY<'a, D>
 where D: Data + ?Sized {
+    set_plotoptions!();
+
     /// Plot the data with the options specified in [`XY`].
     pub fn plot(&self) {
         Python::with_gil(|py| {
@@ -388,37 +445,52 @@ where D: Data + ?Sized {
         self.prev_data.push((self.options.clone(), data));
         self
     }
+}
 
-    #[must_use]
-    pub fn fmt(&mut self, fmt: &'a str) -> &mut Self {
-        self.options.fmt = fmt;
-        self
+/// Options to plot functions (require the library [curve-sampling][]).
+///
+/// [curve-sampling]: https://crates.io/crates/curve-sampling
+pub struct Fun<'a, F> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    f: F,
+    a: f64, // [a, b] is the interval on which we want to plot f.
+    b: f64,
+    n: usize,
+}
+
+#[cfg(feature = "curve-sampling")]
+impl<'a, F> Fun<'a, F>
+where F: FnMut(f64) -> f64 {
+    set_plotoptions!();
+
+    /// Plot the data with the options specified in [`XY`].
+    pub fn plot(&mut self) {
+        let s = Sampling::fun(&mut self.f, self.a, self.b)
+            .n(self.n).build();
+        // Ensure `x` and `y` live to the end of the call to "plot".
+        let x = s.x();
+        let y = s.y();
+        Python::with_gil(|py| {
+            let xn = x.to_numpy(py, &self.axes.numpy);
+            let yn = y.to_numpy(py, &self.axes.numpy);
+            self.axes.ax.call_method(py, "plot", (xn, yn, self.options.fmt),
+                                     Some(self.options.kwargs(py)))
+                .unwrap();
+        })
     }
 
-    #[must_use]
-    pub fn animated(&mut self) -> &mut Self {
-        self.options.animated = true;
-        self
-    }
-
-    #[must_use]
-    pub fn antialiased(&mut self, b: bool) -> &mut Self {
-        self.options.antialiased = b;
-        self
-    }
-
-    #[must_use]
-    pub fn label(&mut self, label: &'a str) -> &mut Self {
-        self.options.label = label;
-        self
-    }
-
-    #[must_use]
-    pub fn linewidth(&mut self, w: f64) -> &mut Self {
-        self.options.linewidth = Some(w);
+    /// Set the maximum number of evaluations of the function to build
+    /// the sampling.  Panic if n < 2.
+    pub fn n(&mut self, n: usize) -> &mut Self {
+        if n < 2 {
+            panic!("matplotlib::Fun::n: at least two points are required.");
+        }
+        self.n = n;
         self
     }
 }
+
 
 impl Line2D {
     fn set_kw<'a, I>(&'a self, kwargs: I) -> &'a Self

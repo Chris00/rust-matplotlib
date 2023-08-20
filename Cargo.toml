@@ -13,8 +13,11 @@ categories = ["science", "visualization", "mathematics", "graphics"]
 
 [dependencies]
 numpy = "0.18.0"
-
+curve-sampling = { version = "0.3", optional = true }
 
 [dependencies.pyo3]
 version = "0.18.2"
 features = ["auto-initialize"]
+
+[features]
+default = ["curve-sampling"]
