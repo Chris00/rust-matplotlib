@@ -210,7 +210,7 @@ impl Axes {
     /// use matplotlib::Plot;
     /// let (fig, [[mut ax]]) = Plot::sub()?;
     /// ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
-    /// fig.savefig("XY_plot.pdf")?;
+    /// fig.savefig("target/XY_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
     // FIXME: Do we want to check that `x` and `y` have the same
@@ -225,6 +225,26 @@ impl Axes {
         XY { axes: self,
              options: PlotOptions::new(),
              data: PlotData::XY(x, y),
+             prev_data: vec![] }
+    }
+
+    /// Plot `y` versus its indices as lines and/or markers.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib::Plot;
+    /// let (fig, [[mut ax]]) = Plot::sub()?;
+    /// ax.y(&[1., 4., 2., 3.]).plot();
+    /// fig.savefig("target/Y_plot.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    #[must_use]
+    pub fn y<'a, D>(&'a mut self, y: &'a D) -> XY<'a, D>
+    where D: Data + ?Sized {
+        XY { axes: self,
+             options: PlotOptions::new(),
+             data: PlotData::Y(y),
              prev_data: vec![] }
     }
 
@@ -355,6 +375,15 @@ where D: Data + ?Sized {
     #[must_use]
     pub fn xy(&mut self, x: &'a D, y: &'a D) -> &mut Self {
         let mut data = PlotData::XY(x, y);
+        swap(&mut data, &mut self.data);
+        self.prev_data.push((self.options.clone(), data));
+        self
+    }
+
+    /// Add the dataset `y`.
+    #[must_use]
+    pub fn y(&mut self, y: &'a D) -> &mut Self {
+        let mut data = PlotData::Y(y);
         swap(&mut data, &mut self.data);
         self.prev_data.push((self.options.clone(), data));
         self
