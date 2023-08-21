@@ -251,8 +251,16 @@ impl Axes {
              prev_data: vec![] }
     }
 
+    #[must_use]
+    pub fn xy_from<'a, I>(&'a mut self, xy: I) -> XYFrom<'a, I>
+    where I: IntoIterator<Item = (f64, f64)> {
+        XYFrom { axes: self,
+                 options: PlotOptions::new(),
+                 data: xy }
+    }
+
     #[cfg(feature = "curve-sampling")]
-    /// Plot the graph of the function `f`.
+    /// Plot the graph of the function `f` on the interval \[`a`, `b`\].
     ///
     /// # Example
     /// ```
@@ -444,6 +452,36 @@ where D: Data + ?Sized {
         swap(&mut data, &mut self.data);
         self.prev_data.push((self.options.clone(), data));
         self
+    }
+}
+
+pub struct XYFrom<'a, I> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    data: I,
+}
+
+impl<'a, I> XYFrom<'a, I>
+where I: IntoIterator<Item = (f64, f64)> {
+    set_plotoptions!();
+
+    /// Plot the data with the options specified in [`XYFrom`].
+    pub fn plot(self) {
+        let mut data = self.data.into_iter();
+        let n = data.size_hint().0;
+        let mut x = Vec::with_capacity(n);
+        let mut y = Vec::with_capacity(n);
+        for (i, (xi, yi)) in data.enumerate() {
+            x.push(xi);
+            y.push(yi);
+        }
+        Python::with_gil(|py| {
+            let xn = x.to_numpy(py, &self.axes.numpy);
+            let yn = y.to_numpy(py, &self.axes.numpy);
+            self.axes.ax.call_method(py, "plot", (xn, yn, self.options.fmt),
+                                     Some(self.options.kwargs(py)))
+                .unwrap();
+        })
     }
 }
 
