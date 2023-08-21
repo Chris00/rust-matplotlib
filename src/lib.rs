@@ -356,31 +356,31 @@ impl<'a> PlotOptions<'a> {
 
 macro_rules! set_plotoptions { () => {
     #[must_use]
-    pub fn fmt(&mut self, fmt: &'a str) -> &mut Self {
+    pub fn fmt(mut self, fmt: &'a str) -> Self {
         self.options.fmt = fmt;
         self
     }
 
     #[must_use]
-    pub fn animated(&mut self) -> &mut Self {
+    pub fn animated(mut self) -> Self {
         self.options.animated = true;
         self
     }
 
     #[must_use]
-    pub fn antialiased(&mut self, b: bool) -> &mut Self {
+    pub fn antialiased(mut self, b: bool) -> Self {
         self.options.antialiased = b;
         self
     }
 
     #[must_use]
-    pub fn label(&mut self, label: &'a str) -> &mut Self {
+    pub fn label(mut self, label: &'a str) -> Self {
         self.options.label = label;
         self
     }
 
     #[must_use]
-    pub fn linewidth(&mut self, w: f64) -> &mut Self {
+    pub fn linewidth(mut self, w: f64) -> Self {
         self.options.linewidth = Some(w);
         self
     }
@@ -407,7 +407,7 @@ where D: Data + ?Sized {
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XY`].
-    pub fn plot(&self) {
+    pub fn plot(self) {
         Python::with_gil(|py| {
             for (opt, data) in self.prev_data.iter() {
                 Self::plot_data(py, self.axes, opt, data)
@@ -467,11 +467,11 @@ where I: IntoIterator<Item = (f64, f64)> {
 
     /// Plot the data with the options specified in [`XYFrom`].
     pub fn plot(self) {
-        let mut data = self.data.into_iter();
+        let data = self.data.into_iter();
         let n = data.size_hint().0;
         let mut x = Vec::with_capacity(n);
         let mut y = Vec::with_capacity(n);
-        for (i, (xi, yi)) in data.enumerate() {
+        for (xi, yi) in data {
             x.push(xi);
             y.push(yi);
         }
@@ -503,7 +503,7 @@ where F: FnMut(f64) -> f64 {
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XY`].
-    pub fn plot(&mut self) {
+    pub fn plot(mut self) {
         let s = Sampling::fun(&mut self.f, self.a, self.b)
             .n(self.n).build();
         // Ensure `x` and `y` live to the end of the call to "plot".
