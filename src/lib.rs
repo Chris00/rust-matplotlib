@@ -1,5 +1,5 @@
 use std::{path::Path,
-          fmt::{Display, Formatter}, mem::swap};
+          fmt::{Display, Formatter}, mem::swap, borrow::Borrow};
 
 use pyo3::{prelude::*,
            exceptions::{PyFileNotFoundError, PyPermissionError},
@@ -251,9 +251,23 @@ impl Axes {
              prev_data: vec![] }
     }
 
+    /// Convenience function to plot X-Y coordinates coming from `xy`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib::Plot;
+    /// let (fig, [[mut ax]]) = Plot::sub()?;
+    /// ax.xy_from(&[(1., 2.), (4., 2.), (2., 3.), (3., 4.)]).plot();
+    /// ax.xy_from([(1., 0.), (2., 3.), (3., 1.), (4., 3.)]).plot();
+    /// fig.savefig("target/XY_from_plot.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
     #[must_use]
     pub fn xy_from<'a, I>(&'a mut self, xy: I) -> XYFrom<'a, I>
-    where I: IntoIterator<Item = (f64, f64)> {
+    where I: IntoIterator,
+          <I as IntoIterator>::Item: Borrow<(f64, f64)> {
+        // (f64, f64) chosend for comatibility with `zip`.
         XYFrom { axes: self,
                  options: PlotOptions::new(),
                  data: xy }
@@ -467,7 +481,8 @@ pub struct XYFrom<'a, I> {
 }
 
 impl<'a, I> XYFrom<'a, I>
-where I: IntoIterator<Item = (f64, f64)> {
+where I: IntoIterator,
+      <I as IntoIterator>::Item: Borrow<(f64, f64)> {
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XYFrom`].
@@ -476,7 +491,8 @@ where I: IntoIterator<Item = (f64, f64)> {
         let n = data.size_hint().0;
         let mut x = Vec::with_capacity(n);
         let mut y = Vec::with_capacity(n);
-        for (xi, yi) in data {
+        for di in data {
+            let &(xi, yi) = di.borrow();
             x.push(xi);
             y.push(yi);
         }
