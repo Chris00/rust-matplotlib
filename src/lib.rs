@@ -323,6 +323,12 @@ impl Axes {
     }
 }
 
+enum PlotData<'a, D>
+where D: ?Sized {
+    XY(&'a D, &'a D),
+    Y(&'a D),
+}
+
 #[derive(Clone)]
 struct PlotOptions<'a> {
     fmt: &'a str,
@@ -352,8 +358,33 @@ impl<'a> PlotOptions<'a> {
         }
         kwargs
     }
+
+    fn plot_xy<D>(&self, py: Python<'_>, axes: &Axes, x: &D, y: &D)
+    where D: Data + ?Sized {
+        let xn = x.to_numpy(py, &axes.numpy);
+        let yn = y.to_numpy(py, &axes.numpy);
+        axes.ax.call_method(py, "plot", (xn, yn, self.fmt),
+                            Some(self.kwargs(py))).unwrap();
+    }
+
+    fn plot_y<D>(&self, py: Python<'_>, axes: &Axes, y: &D)
+    where D: Data + ?Sized {
+        let yn = y.to_numpy(py, &axes.numpy);
+        axes.ax.call_method(py, "plot", (yn, self.fmt),
+                            Some(self.kwargs(py))).unwrap();
+    }
+
+    fn plot_data<D>(&self, py: Python<'_>, axes: &Axes, data: &PlotData<'_, D>)
+    where D: Data + ?Sized {
+        match data {
+            PlotData::XY(x, y) => self.plot_xy(py, axes, *x, *y),
+            PlotData::Y(y) => self.plot_y(py, axes, *y),
+        }
+    }
+
 }
 
+/// Declare methods to set the options assuming `self.options` exists.
 macro_rules! set_plotoptions { () => {
     #[must_use]
     pub fn fmt(mut self, fmt: &'a str) -> Self {
@@ -386,12 +417,6 @@ macro_rules! set_plotoptions { () => {
     }
 }}
 
-enum PlotData<'a, D>
-where D: ?Sized {
-    XY(&'a D, &'a D),
-    Y(&'a D),
-}
-
 pub struct XY<'a, D>
 where D: ?Sized {
     axes: &'a Axes,
@@ -410,30 +435,10 @@ where D: Data + ?Sized {
     pub fn plot(self) {
         Python::with_gil(|py| {
             for (opt, data) in self.prev_data.iter() {
-                Self::plot_data(py, self.axes, opt, data)
+                opt.plot_data(py, self.axes, data)
             }
-            Self::plot_data(py, self.axes, &self.options, &self.data)
+            self.options.plot_data(py, self.axes, &self.data)
         })
-    }
-
-    /// Plot a single dataset.
-    fn plot_data(py: Python<'_>, axes: &Axes,
-                 opt: &PlotOptions<'_>, data: &PlotData<'_, D>) {
-        match data {
-            PlotData::XY(x, y) => {
-                let xn = x.to_numpy(py, &axes.numpy);
-                let yn = y.to_numpy(py, &axes.numpy);
-                axes.ax.call_method(py, "plot", (xn, yn, opt.fmt),
-                                    Some(opt.kwargs(py)))
-                    .unwrap();
-            }
-            PlotData::Y(y) => {
-                let yn = y.to_numpy(py, &axes.numpy);
-                axes.ax.call_method(py, "plot", (yn, opt.fmt),
-                                    Some(opt.kwargs(py)))
-                    .unwrap();
-            }
-        }
     }
 
     /// Add the dataset (`x`, `y`).
@@ -475,13 +480,7 @@ where I: IntoIterator<Item = (f64, f64)> {
             x.push(xi);
             y.push(yi);
         }
-        Python::with_gil(|py| {
-            let xn = x.to_numpy(py, &self.axes.numpy);
-            let yn = y.to_numpy(py, &self.axes.numpy);
-            self.axes.ax.call_method(py, "plot", (xn, yn, self.options.fmt),
-                                     Some(self.options.kwargs(py)))
-                .unwrap();
-        })
+        Python::with_gil(|py| self.options.plot_xy(py, self.axes, &x, &y))
     }
 }
 
@@ -509,13 +508,7 @@ where F: FnMut(f64) -> f64 {
         // Ensure `x` and `y` live to the end of the call to "plot".
         let x = s.x();
         let y = s.y();
-        Python::with_gil(|py| {
-            let xn = x.to_numpy(py, &self.axes.numpy);
-            let yn = y.to_numpy(py, &self.axes.numpy);
-            self.axes.ax.call_method(py, "plot", (xn, yn, self.options.fmt),
-                                     Some(self.options.kwargs(py)))
-                .unwrap();
-        })
+        Python::with_gil(|py| self.options.plot_xy(py, self.axes, &x, &y))
     }
 
     /// Set the maximum number of evaluations of the function to build
