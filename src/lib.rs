@@ -569,15 +569,47 @@ impl Figure {
         })
     }
 
-    pub fn savefig(self, path: impl AsRef<Path>) -> Result<(), Error> {
-        meth!(self.figure, savefig, py -> (path.as_ref(),), e -> {
-            if e.is_instance_of::<PyFileNotFoundError>(py) {
-                Error::FileNotFoundError
-            } else if e.is_instance_of::<PyPermissionError>(py) {
-                Error::PermissionError
-            } else {
-                Error::Unknown(e)
-            } })?;
+    pub fn fig<P>(self, path: P) -> Savefig<P>
+    where P: AsRef<Path> {
+        Savefig { figure: self.figure, path, dpi: None }
+    }
+}
+
+pub struct Savefig<P> {
+    figure: PyObject,
+    path: P,
+    dpi: Option<f64>,
+}
+
+impl<P> Savefig<P>
+where P: AsRef<Path> {
+    pub fn dpi(&mut self, dpi: f64) -> &mut Self {
+        if dpi > 0. {
+            self.dpi = Some(dpi);
+        } else {
+            self.dpi = None;
+        }
+        self
+    }
+
+    pub fn save(&self) -> Result<(), Error> {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            if let Some(dpi) = self.dpi {
+                kwargs.set_item("dpi", dpi).unwrap()
+            }
+            self.figure.call_method(py, intern!(py, "savefig"),
+                                    (self.path.as_ref(),), Some(kwargs))
+                .map_err(|e| {
+                    if e.is_instance_of::<PyFileNotFoundError>(py) {
+                        Error::FileNotFoundError
+                    } else if e.is_instance_of::<PyPermissionError>(py) {
+                        Error::PermissionError
+                    } else {
+                        Error::Unknown(e)
+                    }
+                })
+        })?;
         Ok(())
     }
 }
