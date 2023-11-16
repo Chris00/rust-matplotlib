@@ -12,11 +12,11 @@ keywords = ["plot", "graph", "curve", "surface"]
 categories = ["science", "visualization", "mathematics", "graphics"]
 
 [dependencies]
-numpy = "0.18.0"
+numpy = "0.20.0"
 curve-sampling = { version = "0.3", optional = true }
 
 [dependencies.pyo3]
-version = "0.18.2"
+version = "0.20.0"
 features = ["auto-initialize"]
 
 [features]
