@@ -1,6 +1,6 @@
 [package]
 name = "matplotlib"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Christophe Troestler <christophe.troestler@umons.ac.be>"]
 description = "Binding to Python Matplotlib"
@@ -14,6 +14,7 @@ categories = ["science", "visualization", "mathematics", "graphics"]
 [dependencies]
 numpy = "0.20.0"
 curve-sampling = { version = "0.3", optional = true }
+lazy_static = "1.4.0"
 
 [dependencies.pyo3]
 version = "0.20.0"

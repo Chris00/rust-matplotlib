@@ -1,17 +1,38 @@
-use std::{path::Path,
-          fmt::{Display, Formatter}, mem::swap, borrow::Borrow};
+//! [Rust][] bindings to [Matplotlib][] Python visualization library.
+//!
+//! Usage
+//! -----
+//!
+//! These bindings provide an interface close to [Matplotlib][]'s explicit
+//! one while keeping a Rust flavor.
+//!
+//! [Rust]: https://www.rust-lang.org/
+//! [Matplotlib]: https://matplotlib.org/
 
-use pyo3::{prelude::*,
-           exceptions::{PyFileNotFoundError, PyPermissionError},
-           types::{PyTuple, IntoPyDict, PyDict, PyList}, intern};
-use numpy::{PyArray1, PyArray2};
+use std::{
+    borrow::Borrow,
+    fmt::{Display, Formatter},
+    mem::swap,
+    path::Path,
+};
+use lazy_static::lazy_static;
+use pyo3::{
+    prelude::*,
+    intern,
+    exceptions::{PyFileNotFoundError, PyPermissionError},
+    types::{IntoPyDict, PyDict, PyList},
+};
+use numpy::{
+    PyArray1,
+    PyArray2,
+};
 
 #[cfg(feature = "curve-sampling")]
 use curve_sampling::Sampling;
 
-macro_rules! py  {
-    ($py: ident, $lib: expr, $f: ident) => {
-        $lib.getattr($py, intern!($py, stringify!($f))).unwrap()
+macro_rules! getattr {
+    ($py: ident, $lib: expr, $f: literal) => {
+        $lib.getattr($py, intern!($py, $f)).unwrap()
     };
 }
 
@@ -51,35 +72,67 @@ macro_rules! meth {
 /// Possible errors of matplotlib functions.
 #[derive(Debug)]
 pub enum Error {
-    /// Matplotlib was not found on the system.
+    /// The Python library "matplotlib" was not found.
     NoMatplotlib,
     /// The path contains an elelement that is not a directory or does
     /// not exist.
     FileNotFoundError,
     /// Permission denied to access or create the filesystem path.
     PermissionError,
-    /// Unknown error.
-    Unknown(PyErr),
+    /// Other Python errors.
+    Python(PyErr),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
             Error::NoMatplotlib =>
-                write!(f, "the matplotlib library has not been found"),
-            Error::FileNotFoundError =>
+                write!(f, "The matplotlib library has not been found.\n\
+Please install it.  See https://matplotlib.or/\n\
+If you use Anaconda, see https://github.com/PyO3/pyo3/issues/1554"),
+           Error::FileNotFoundError =>
                 write!(f, "A path contains an element that is not a \
                            directory or does not exist"),
             Error::PermissionError =>
                 write!(f, "Permission denied to access or create the \
                            filesystem path"),
-            Error::Unknown(e) =>
-                write!(f, "Unknown Python error: {}", e),
+            Error::Python(e) =>
+                write!(f, "Python error: {}", e),
         }
     }
 }
 
 impl std::error::Error for Error {}
+
+/// Import and return a handle to the module `$m`.
+macro_rules! pyimport { ($m: literal) => {
+    Python::with_gil(|py|
+        PyModule::import(py, intern!(py, $m)).map(|m| m.into()))
+}}
+
+lazy_static! {
+    // Import matplotlib modules.
+    static ref FIGURE: Result<Py<PyModule>, PyErr> = {
+        pyimport!("matplotlib.figure")
+    };
+    static ref PYPLOT: Result<Py<PyModule>, PyErr> = {
+        pyimport!("matplotlib.pyplot")
+    };
+    static ref NUMPY: Result<Numpy, PyErr> = {
+        Ok(Numpy {
+            numpy: pyimport!("numpy.ctypeslib")?,
+            ctypes: pyimport!("ctypes")?,
+        })
+    };
+}
+
+/// Return a handle to the module `$m`.
+/// ⚠ This may try to lock Python's GIL.  Make sure it is executed
+/// outside a call to `Python::with_gil`.
+macro_rules! pymod { ($m: ident) => {
+    $m.as_ref().map_err(|_| Error::NoMatplotlib)
+}}
+
 
 /// Represent a "connection" to the `numpy` module to be able to
 /// perform copy-free conversions of data.
@@ -87,18 +140,6 @@ impl std::error::Error for Error {}
 pub struct Numpy {
     numpy: Py<PyModule>,
     ctypes: Py<PyModule>,
-}
-
-impl Numpy {
-    /// Return a new `Numpy`.
-    fn new(py: Python) -> Result<Self, Error> {
-        let numpy = PyModule::import(py, intern!(py, "numpy.ctypeslib"))
-            .map_err(|_| Error::NoMatplotlib)?;
-        let ctypes = PyModule::import(py, intern!(py, "ctypes"))
-            .map_err(|_| Error::NoMatplotlib)?;
-        Ok(Self { numpy: numpy.into(),
-                  ctypes: ctypes.into() })
-    }
 }
 
 /// Trait expressing that `Self` can be converted to a numpy.ndarray
@@ -111,34 +152,26 @@ impl<T> Data for T where T: AsRef<[f64]> {
     fn to_numpy(&self, py: Python, p: &Numpy) -> PyObject {
         let x = self.as_ref();
         // ctypes.POINTER(ctypes.c_double)
-        let ty = py!(py, p.ctypes, POINTER)
-            .call1(py, (py!(py, p.ctypes, c_double),)).unwrap();
+        let ty = getattr!(py, p.ctypes, "POINTER")
+            .call1(py, (getattr!(py, p.ctypes, "c_double"),)).unwrap();
         // ctypes.cast(x.as_ptr(), ty)
-        let ptr = py!(py, p.ctypes, cast)
+        let ptr = getattr!(py, p.ctypes, "cast")
             .call1(py, (x.as_ptr() as usize, ty)).unwrap();
         // numpy.ctypeslib.as_array(ptr, shape=(x.len(),))
-        py!(py, p.numpy, as_array).call1(py, (ptr, (x.len(),))).unwrap()
+        getattr!(py, p.numpy, "as_array")
+            .call1(py, (ptr, (x.len(),))).unwrap()
     }
 }
 
-pub struct Plot {}
-
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Axes {
     ax: PyObject,
-    numpy: Numpy,
 }
 
-impl Axes {
-    fn new(py: Python, ax: PyObject) -> Self {
-        Self { ax,  numpy: Numpy::new(py).unwrap() }
-    }
-}
-
-
+/// The top level container for all the plot elements.
+#[derive(Debug)]
 pub struct Figure {
-    plt: Py<PyModule>, // module matplotlib.pyplot
-    figure: PyObject,
+    fig: PyObject, // instance of matplotlib.figure.Figure
 }
 
 pub struct Line2D {
@@ -151,58 +184,145 @@ fn grid<const R: usize, const C: usize, U>(
     let mut r = 0;
     [(); R].map(|_| {
         let mut c = 0;
-        let row = [(); C].map(|_| { let y = f(r, c);
-                                    c += 1;
-                                    y });
+        let row = [(); C].map(|_| {
+            let y = f(r, c);
+            c += 1;
+            y });
         r += 1;
         row })
 }
 
-
-impl Plot {
-    fn pyplot(py: Python) -> Result<&PyModule, Error> {
-        PyModule::import(py, intern!(py, "matplotlib.pyplot"))
-            .map_err(|_| Error::NoMatplotlib)
+impl Figure {
+    /// Return a new `Figure`.
+    pub fn new() -> Result<Figure, Error> {
+        let figure = pymod!(FIGURE)?;
+        Python::with_gil(|py| {
+            let fig = getattr!(py, figure, "Figure")
+                .call0(py).unwrap();
+            Ok(Self { fig: fig.into() })
+        })
     }
 
     ///
     /// Return an error if Matplotlib is not present on the system.
-    pub fn sub<const R: usize, const C: usize>
-        () -> Result<(Figure, [[Axes; C]; R]), Error>{
+    pub fn subplots<const R: usize, const C: usize>(
+        &self) -> Result<[[Axes; C]; R], Error> {
         Python::with_gil(|py| {
-            let plt = Self::pyplot(py)?;
-            let s = plt.getattr(intern!(py, "subplots")).unwrap();
-            let s: &PyTuple = s.call1((R, C)).unwrap().downcast().unwrap();
-            let fig = Figure { plt: plt.into(),
-                               figure: s.get_item(0).unwrap().into() };
-            let axg = s.get_item(1).unwrap();
+            let axs = self.fig
+                .call_method1(py, "subplots", (R, C))
+                .map_err(|e| Error::Python(e))?;
             let axes;
             if R == 1 {
                 if C == 1 {
-                    axes = grid(|_,_| Axes::new(py, axg.into()));
+                    axes = grid(|_,_| Axes { ax: axs.clone() });
                 } else { // C > 1
-                    let axg: &PyArray1<PyObject> = axg.downcast().unwrap();
+                    let axg: &PyArray1<PyObject> = axs.downcast(py).unwrap();
                     axes = grid(|_,c| {
                         let ax = axg.get_owned(c).unwrap();
-                        Axes::new(py, ax) });
+                        Axes { ax } });
                 }
             } else { // R > 1
                 if C == 1 {
-                    let axg: &PyArray1<PyObject> = axg.downcast().unwrap();
+                    let axg: &PyArray1<PyObject> = axs.downcast(py).unwrap();
                     axes = grid(|r,_| {
                         let ax = axg.get_owned(r).unwrap();
-                        Axes::new(py, ax) });
+                        Axes { ax } });
                 } else { // C > 1
-                    let axg: &PyArray2<PyObject> = axg.downcast().unwrap();
+                    let axg: &PyArray2<PyObject> = axs.downcast(py).unwrap();
                     axes = grid(|r, c| {
                         let ax = axg.get_owned([r, c]).unwrap();
-                        Axes::new(py, ax) });
+                        Axes { ax } });
                 }
             }
-            Ok((fig, axes))
+            Ok(axes)
         })
+        }
+
+    /// If using a GUI backend with pyplot, display the figure window.
+    ///
+    /// ⚠ [This does not manage an GUI event loop][GUI]. Consequently,
+    /// the figure may only be shown briefly or not shown at all if
+    /// you or your environment are not managing an event loop.  Use
+    /// [`matplotlib::show()`] for that.
+    ///
+    /// [GUI]: https://matplotlib.org/stable/api/figure_api.html#matplotlib.figure.Figure.show
+    pub fn show(self) -> Result<(), Error> {
+        Python::with_gil(|py|
+            match self.fig.call_method0(py, intern!(py, "show")) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(Error::Python(e)),
+            })
+    }
+
+    pub fn save(&self) -> Savefig {
+        Savefig { fig: self.fig.clone(), dpi: None }
     }
 }
+
+pub struct Savefig {
+    fig: PyObject,
+    dpi: Option<f64>,
+}
+
+impl Savefig {
+    pub fn dpi(&mut self, dpi: f64) -> &mut Self {
+        if dpi > 0. {
+            self.dpi = Some(dpi);
+        } else {
+            self.dpi = None;
+        }
+        self
+    }
+
+    pub fn to_file(&self, path: impl AsRef<Path>) -> Result<(), Error> {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            if let Some(dpi) = self.dpi {
+                kwargs.set_item("dpi", dpi).unwrap()
+            }
+            self.fig.call_method(
+                py, intern!(py, "savefig"),
+                (path.as_ref(),), Some(kwargs)
+            ).map_err(|e| {
+                    if e.is_instance_of::<PyFileNotFoundError>(py) {
+                        Error::FileNotFoundError
+                    } else if e.is_instance_of::<PyPermissionError>(py) {
+                        Error::PermissionError
+                    } else {
+                        Error::Python(e)
+                    }
+                })
+        })?;
+        Ok(())
+    }
+}
+
+
+pub fn figure() -> Result<Figure, Error> {
+    let pyplot = pymod!(PYPLOT)?;
+    Python::with_gil(|py| {
+        let fig = getattr!(py, pyplot, "figure")
+            .call0(py).map_err(|e| Error::Python(e))?;
+        Ok(Figure { fig: fig.into() })
+    })
+}
+
+pub fn subplots<const R: usize, const C: usize>(
+) -> Result<(Figure, [[Axes; C]; R]), Error> {
+    let fig = figure()?;
+    let ax = fig.subplots()?;
+    Ok((fig, ax))
+}
+
+/// Display all open figures.
+pub fn show() {
+    let pyplot = pymod!(PYPLOT).unwrap();
+    Python::with_gil(|py| {
+        // FIXME: What do we want to do with the errors?
+        getattr!(py, pyplot, "show").call0(py).unwrap();
+    })
+}
+
 
 impl Axes {
     /// Plot `y` versus `x` as lines and/or markers.
@@ -210,10 +330,10 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib::Plot;
-    /// let (fig, [[mut ax]]) = Plot::sub()?;
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
-    /// fig.savefig("target/XY_plot.pdf")?;
+    /// fig.save().to_file("target/XY_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
     // FIXME: Do we want to check that `x` and `y` have the same
@@ -236,10 +356,10 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib::Plot;
-    /// let (fig, [[mut ax]]) = Plot::sub()?;
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.y(&[1., 4., 2., 3.]).plot();
-    /// fig.savefig("target/Y_plot.pdf")?;
+    /// fig.save().to_file("target/Y_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
     #[must_use]
@@ -256,11 +376,11 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib::Plot;
-    /// let (fig, [[mut ax]]) = Plot::sub()?;
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.xy_from(&[(1., 2.), (4., 2.), (2., 3.), (3., 4.)]).plot();
     /// ax.xy_from([(1., 0.), (2., 3.), (3., 1.), (4., 3.)]).plot();
-    /// fig.savefig("target/XY_from_plot.pdf")?;
+    /// fig.save().to_file("target/XY_from_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
     #[must_use]
@@ -278,10 +398,10 @@ impl Axes {
     ///
     /// # Example
     /// ```
-    /// use matplotlib::Plot;
-    /// let (fig, [[mut ax]]) = Plot::sub()?;
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.fun(|x| x * x, 0., 1.).plot();
-    /// fig.savefig("target/Fun_plot.pdf")?;
+    /// fig.save().to_file("target/Fun_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
     pub fn fun<'a, F>(&'a mut self, f: F, a: f64, b: f64) -> Fun<'a, F>
@@ -293,13 +413,15 @@ impl Axes {
     }
 
 
+    #[must_use]
     pub fn scatter<D>(&mut self, x: &D, y: &D) -> &mut Self
     where D: Data + ?Sized {
         // FIXME: Do we want to check that `x` and `y` have the same
         // dimension?  Better error message?
+        let numpy = pymod!(NUMPY).unwrap();
         meth!(self.ax, scatter, py -> {
-            let xn = x.to_numpy(py, &self.numpy);
-            let yn = y.to_numpy(py, &self.numpy);
+            let xn = x.to_numpy(py, &numpy);
+            let yn = y.to_numpy(py, &numpy);
             (xn, yn) })
             .unwrap();
         self
@@ -332,8 +454,9 @@ impl Axes {
         self
     }
 
-    pub fn legend(&mut self) {
+    pub fn legend(&mut self) -> &mut Self {
         meth!(self.ax, legend, ()).unwrap();
+        self
     }
 }
 
@@ -373,26 +496,30 @@ impl<'a> PlotOptions<'a> {
         kwargs
     }
 
-    fn plot_xy<D>(&self, py: Python<'_>, axes: &Axes, x: &D, y: &D)
+    fn plot_xy<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
+        x: &D, y: &D)
     where D: Data + ?Sized {
-        let xn = x.to_numpy(py, &axes.numpy);
-        let yn = y.to_numpy(py, &axes.numpy);
+        let xn = x.to_numpy(py, numpy);
+        let yn = y.to_numpy(py, numpy);
         axes.ax.call_method(py, "plot", (xn, yn, self.fmt),
                             Some(self.kwargs(py))).unwrap();
     }
 
-    fn plot_y<D>(&self, py: Python<'_>, axes: &Axes, y: &D)
+    fn plot_y<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes, y: &D)
     where D: Data + ?Sized {
-        let yn = y.to_numpy(py, &axes.numpy);
+        let yn = y.to_numpy(py, numpy);
         axes.ax.call_method(py, "plot", (yn, self.fmt),
                             Some(self.kwargs(py))).unwrap();
     }
 
-    fn plot_data<D>(&self, py: Python<'_>, axes: &Axes, data: &PlotData<'_, D>)
+    fn plot_data<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
+        data: &PlotData<'_, D>)
     where D: Data + ?Sized {
         match data {
-            PlotData::XY(x, y) => self.plot_xy(py, axes, *x, *y),
-            PlotData::Y(y) => self.plot_y(py, axes, *y),
+            PlotData::XY(x, y) => {
+                self.plot_xy(py, numpy, axes, *x, *y) }
+            PlotData::Y(y) => {
+                self.plot_y(py, numpy, axes, *y) }
         }
     }
 
@@ -447,11 +574,12 @@ where D: Data + ?Sized {
 
     /// Plot the data with the options specified in [`XY`].
     pub fn plot(self) {
+        let numpy = pymod!(NUMPY).unwrap();
         Python::with_gil(|py| {
             for (opt, data) in self.prev_data.iter() {
-                opt.plot_data(py, self.axes, data)
+                opt.plot_data(py, numpy, self.axes, data)
             }
-            self.options.plot_data(py, self.axes, &self.data)
+            self.options.plot_data(py, numpy, self.axes, &self.data)
         })
     }
 
@@ -496,13 +624,16 @@ where I: IntoIterator,
             x.push(xi);
             y.push(yi);
         }
-        Python::with_gil(|py| self.options.plot_xy(py, self.axes, &x, &y))
+        let numpy = pymod!(NUMPY).unwrap();
+        Python::with_gil(|py| {
+            self.options.plot_xy(py, numpy, self.axes, &x, &y) })
     }
 }
 
 /// Options to plot functions (require the library [curve-sampling][]).
 ///
 /// [curve-sampling]: https://crates.io/crates/curve-sampling
+#[must_use]
 pub struct Fun<'a, F> {
     axes: &'a Axes,
     options: PlotOptions<'a>,
@@ -524,11 +655,13 @@ where F: FnMut(f64) -> f64 {
         // Ensure `x` and `y` live to the end of the call to "plot".
         let x = s.x();
         let y = s.y();
-        Python::with_gil(|py| self.options.plot_xy(py, self.axes, &x, &y))
+        let numpy = pymod!(NUMPY).unwrap();
+        Python::with_gil(|py| {
+            self.options.plot_xy(py, numpy, self.axes, &x, &y) })
     }
 
     /// Set the maximum number of evaluations of the function to build
-    /// the sampling.  Panic if n < 2.
+    /// the sampling.  Panic if `n` < 2.
     pub fn n(&mut self, n: usize) -> &mut Self {
         if n < 2 {
             panic!("matplotlib::Fun::n: at least two points are required.");
@@ -551,76 +684,12 @@ impl Line2D {
         self
     }
 
-    fn label(&self, label: &str) -> &Self {
+    pub fn label(&self, label: &str) -> &Self {
         self.set_kw([("label", label)])
     }
 }
 
 
-impl Figure {
-    // Attach to Plot ??
-    pub fn show(self) -> PyResult<()> {
-        Python::with_gil(|py| {
-            // WARNING: This does not start an envent loop.
-            // https://matplotlib.org/stable/api/figure_api.html#matplotlib.figure.Figure.show
-            // self.figure.call_method0(py, "show")?;
-            py!(py, self.plt, show).call0(py)?;
-            Ok(())
-        })
-    }
-
-    pub fn fig<P>(self, path: P) -> Savefig<P>
-    where P: AsRef<Path> {
-        Savefig { figure: self.figure, path, dpi: None }
-    }
-}
-
-pub struct Savefig<P> {
-    figure: PyObject,
-    path: P,
-    dpi: Option<f64>,
-}
-
-impl<P> Savefig<P>
-where P: AsRef<Path> {
-    pub fn dpi(&mut self, dpi: f64) -> &mut Self {
-        if dpi > 0. {
-            self.dpi = Some(dpi);
-        } else {
-            self.dpi = None;
-        }
-        self
-    }
-
-    pub fn save(&self) -> Result<(), Error> {
-        Python::with_gil(|py| {
-            let kwargs = PyDict::new(py);
-            if let Some(dpi) = self.dpi {
-                kwargs.set_item("dpi", dpi).unwrap()
-            }
-            self.figure.call_method(py, intern!(py, "savefig"),
-                                    (self.path.as_ref(),), Some(kwargs))
-                .map_err(|e| {
-                    if e.is_instance_of::<PyFileNotFoundError>(py) {
-                        Error::FileNotFoundError
-                    } else if e.is_instance_of::<PyPermissionError>(py) {
-                        Error::PermissionError
-                    } else {
-                        Error::Unknown(e)
-                    }
-                })
-        })?;
-        Ok(())
-    }
-}
-
-
-// pub mod plt {
-//     pub fn subplots() -> () {
-
-//     }
-
-// }
 
 #[cfg(test)]
 mod tests {
@@ -628,39 +697,40 @@ mod tests {
 
     #[test]
     fn a_basic_pdf() -> Result<(), Error> {
-        let (fig, [[mut ax]]) = Plot::sub()?;
+        let (fig, [[mut ax]]) = subplots()?;
+        dbg!(&fig);
         ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
-        fig.savefig("target/a_basic.pdf")?;
+        fig.save().to_file("target/a_basic.pdf")?;
         Ok(())
     }
 
     #[test]
     fn a_basic_row() -> Result<(), Error> {
-        let (fig, [[mut ax0, mut ax1]]) = Plot::sub()?;
+        let (fig, [[mut ax0, mut ax1]]) = subplots()?;
         ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
-        fig.savefig("target/a_basic_row.pdf")?;
+        fig.save().to_file("target/a_basic_row.pdf")?;
         Ok(())
     }
 
     #[test]
     fn a_basic_col() -> Result<(), Error> {
-        let (fig, [[mut ax0], [mut ax1]]) = Plot::sub()?;
+        let (fig, [[mut ax0], [mut ax1]]) = subplots()?;
         ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
-        fig.savefig("target/a_basic_col.pdf")?;
+        fig.save().to_file("target/a_basic_col.pdf")?;
         Ok(())
     }
 
     #[test]
     fn a_basic_grid() -> Result<(), Error> {
         let (fig, [[mut ax0, mut ax1],
-                   [mut ax2, mut ax3]]) = Plot::sub()?;
+                   [mut ax2, mut ax3]]) = subplots()?;
         ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
         ax2.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt("r").plot();
         ax3.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt("r.").plot();
-        fig.savefig("target/a_basic_grid.pdf")?;
+        fig.save().to_file("target/a_basic_grid.pdf")?;
         Ok(())
     }
 
