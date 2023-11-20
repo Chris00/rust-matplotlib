@@ -194,6 +194,9 @@ fn grid<const R: usize, const C: usize, U>(
 
 impl Figure {
     /// Return a new `Figure`.
+    ///
+    /// ⚠ The figures created with this function will not be displayed
+    /// with [`show`].  They can be [saved][Figure::save] to files.
     pub fn new() -> Result<Figure, Error> {
         let figure = pymod!(FIGURE)?;
         Python::with_gil(|py| {
@@ -203,8 +206,7 @@ impl Figure {
         })
     }
 
-    ///
-    /// Return an error if Matplotlib is not present on the system.
+    /// Return a grid of subplots with `R` rows and `C` columns.
     pub fn subplots<const R: usize, const C: usize>(
         &self) -> Result<[[Axes; C]; R], Error> {
         Python::with_gil(|py| {
@@ -243,7 +245,7 @@ impl Figure {
     /// ⚠ [This does not manage an GUI event loop][GUI]. Consequently,
     /// the figure may only be shown briefly or not shown at all if
     /// you or your environment are not managing an event loop.  Use
-    /// [`matplotlib::show()`] for that.
+    /// [`show()`] for that.
     ///
     /// [GUI]: https://matplotlib.org/stable/api/figure_api.html#matplotlib.figure.Figure.show
     pub fn show(self) -> Result<(), Error> {
@@ -254,11 +256,13 @@ impl Figure {
             })
     }
 
+    /// Save the figure to a file.
     pub fn save(&self) -> Savefig {
         Savefig { fig: self.fig.clone(), dpi: None }
     }
 }
 
+/// Options for saving figures.
 pub struct Savefig {
     fig: PyObject,
     dpi: Option<f64>,
@@ -298,6 +302,7 @@ impl Savefig {
 }
 
 
+/// Return a new figure.
 pub fn figure() -> Result<Figure, Error> {
     let pyplot = pymod!(PYPLOT)?;
     Python::with_gil(|py| {
@@ -307,6 +312,7 @@ pub fn figure() -> Result<Figure, Error> {
     })
 }
 
+/// Return a figure and a grid of subplots with `R` rows and `C` columns.
 pub fn subplots<const R: usize, const C: usize>(
 ) -> Result<(Figure, [[Axes; C]; R]), Error> {
     let fig = figure()?;
@@ -314,7 +320,7 @@ pub fn subplots<const R: usize, const C: usize>(
     Ok((fig, ax))
 }
 
-/// Display all open figures.
+/// Display all open figures created with [`figure`] or [`subplots`].
 pub fn show() {
     let pyplot = pymod!(PYPLOT).unwrap();
     Python::with_gil(|py| {
