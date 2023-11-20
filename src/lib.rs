@@ -303,6 +303,8 @@ impl Savefig {
 
 
 /// Return a new figure.
+/// This figure is tracked by Matplotlib so [`show()`] displays it.
+/// This implies it must be explicitly deallocated using [`close`].
 pub fn figure() -> Result<Figure, Error> {
     let pyplot = pymod!(PYPLOT)?;
     Python::with_gil(|py| {
@@ -326,6 +328,22 @@ pub fn show() {
     Python::with_gil(|py| {
         // FIXME: What do we want to do with the errors?
         getattr!(py, pyplot, "show").call0(py).unwrap();
+    })
+}
+
+/// Close the figure `fig` (created with [`figure`] or [`subplots`]).
+pub fn close(fig: Figure) {
+    let pyplot = pymod!(PYPLOT).unwrap();
+    Python::with_gil(|py| {
+        getattr!(py, pyplot, "close").call1(py, (fig.fig,)).unwrap();
+    })
+}
+
+/// Close all figures created with [`figure`] or [`subplots`].
+pub fn close_all() {
+    let pyplot = pymod!(PYPLOT).unwrap();
+    Python::with_gil(|py| {
+        getattr!(py, pyplot, "close").call1(py, ("all",)).unwrap();
     })
 }
 
