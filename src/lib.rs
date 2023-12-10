@@ -214,7 +214,8 @@ impl Figure {
 
     /// Return a grid of subplots with `R` rows and `C` columns.
     pub fn subplots<const R: usize, const C: usize>(
-        &self) -> Result<[[Axes; C]; R], Error> {
+        &self
+    ) -> Result<[[Axes; C]; R], Error> {
         Python::with_gil(|py| {
             let axs = self.fig
                 .call_method1(py, "subplots", (R, C))
@@ -269,6 +270,7 @@ impl Figure {
 }
 
 /// Options for saving figures.
+#[must_use]
 pub struct Savefig {
     fig: PyObject,
     dpi: Option<f64>,
@@ -368,7 +370,6 @@ impl Axes {
     /// ```
     // FIXME: Do we want to check that `x` and `y` have the same
     // dimension?  Better error message?
-    #[must_use]
     pub fn xy<'a, D>(&'a mut self, x: &'a D, y: &'a D) -> XY<'a, D>
     where D: Data + ?Sized {
         // The chain leading to plot starts with the data (using this
@@ -392,7 +393,6 @@ impl Axes {
     /// fig.save().to_file("target/Y_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    #[must_use]
     pub fn y<'a, D>(&'a mut self, y: &'a D) -> XY<'a, D>
     where D: Data + ?Sized {
         XY { axes: self,
@@ -413,7 +413,6 @@ impl Axes {
     /// fig.save().to_file("target/XY_from_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    #[must_use]
     pub fn xy_from<'a, I>(&'a mut self, xy: I) -> XYFrom<'a, I>
     where I: IntoIterator,
           <I as IntoIterator>::Item: Borrow<(f64, f64)> {
@@ -457,8 +456,9 @@ impl Axes {
         self
     }
 
-    pub fn set_title(&mut self, v: &str) -> &mut Self {
-        meth!(self.ax, set_title, (v,)).unwrap();
+    /// Set the title to `txt` for the Axes.
+    pub fn set_title(&mut self, txt: &str) -> &mut Self {
+        meth!(self.ax, set_title, (txt,)).unwrap();
         self
     }
 
@@ -618,6 +618,7 @@ macro_rules! set_plotoptions { () => {
     }
 }}
 
+#[must_use]
 pub struct XY<'a, D>
 where D: ?Sized {
     axes: &'a Axes,
@@ -694,7 +695,8 @@ where F: FnMut(f64) -> f64 {
         let y = s.y();
         let numpy = pymod!(NUMPY).unwrap();
         Python::with_gil(|py| {
-            self.options.plot_xy(py, numpy, self.axes, &x, &y) })
+            self.options.plot_xy(py, numpy, self.axes, &x, &y)
+        })
     }
 
     /// Set the maximum number of evaluations of the function to build
