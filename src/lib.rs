@@ -141,23 +141,18 @@ pub struct Numpy {
     ctypes: Py<PyModule>,
 }
 
-/// Trait expressing that `Self` can be converted to a numpy.ndarray
-/// (without copying).  `Numpy` is a handle to the numpy library.
-pub trait Data {
-    fn to_numpy(&self, py: Python, p: &Numpy) -> PyObject;
-}
-
-impl<T> Data for T where T: AsRef<[f64]> {
-    fn to_numpy(&self, py: Python, p: &Numpy) -> PyObject {
-        let x = self.as_ref();
+impl Numpy {
+    /// Convert `vec` to a numpy.ndarray (without copying).
+    fn ndarray(&self, py: Python, x: impl AsRef<[f64]>) -> PyObject {
+        let x = x.as_ref();
         // ctypes.POINTER(ctypes.c_double)
-        let ty = getattr!(py, p.ctypes, "POINTER")
-            .call1(py, (getattr!(py, p.ctypes, "c_double"),)).unwrap();
+        let ty = getattr!(py, self.ctypes, "POINTER")
+            .call1(py, (getattr!(py, self.ctypes, "c_double"),)).unwrap();
         // ctypes.cast(x.as_ptr(), ty)
-        let ptr = getattr!(py, p.ctypes, "cast")
+        let ptr = getattr!(py, self.ctypes, "cast")
             .call1(py, (x.as_ptr() as usize, ty)).unwrap();
         // numpy.ctypeslib.as_array(ptr, shape=(x.len(),))
-        getattr!(py, p.numpy, "as_array")
+        getattr!(py, self.numpy, "as_array")
             .call1(py, (ptr, (x.len(),))).unwrap()
     }
 }
@@ -370,8 +365,8 @@ impl Axes {
     /// ```
     // FIXME: Do we want to check that `x` and `y` have the same
     // dimension?  Better error message?
-    pub fn xy<'a, D>(&'a mut self, x: &'a D, y: &'a D) -> XY<'a, D>
-    where D: Data + ?Sized {
+    pub fn xy<'a, D>(&'a mut self, x: D, y: D) -> XY<'a, D>
+    where D: AsRef<[f64]> {
         // The chain leading to plot starts with the data (using this
         // function) so that additional data may be added, sharing
         // common options.  We also mutably borrow `self` to reflect that
@@ -393,8 +388,8 @@ impl Axes {
     /// fig.save().to_file("target/Y_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    pub fn y<'a, D>(&'a mut self, y: &'a D) -> XY<'a, D>
-    where D: Data + ?Sized {
+    pub fn y<'a, D>(&'a mut self, y: D) -> XY<'a, D>
+    where D: AsRef<[f64]> {
         XY { axes: self,
              options: PlotOptions::new(),
              data: PlotData::Y(y),
@@ -443,14 +438,14 @@ impl Axes {
 
 
     #[must_use]
-    pub fn scatter<D>(&mut self, x: &D, y: &D) -> &mut Self
-    where D: Data + ?Sized {
+    pub fn scatter<D>(&mut self, x: D, y: D) -> &mut Self
+    where D: AsRef<[f64]> {
         // FIXME: Do we want to check that `x` and `y` have the same
         // dimension?  Better error message?
         let numpy = pymod!(NUMPY).unwrap();
         meth!(self.ax, scatter, py -> {
-            let xn = x.to_numpy(py, &numpy);
-            let yn = y.to_numpy(py, &numpy);
+            let xn = numpy.ndarray(py, x);
+            let yn = numpy.ndarray(py, y);
             (xn, yn) })
             .unwrap();
         self
@@ -512,10 +507,9 @@ impl Axes {
     }
 }
 
-enum PlotData<'a, D>
-where D: ?Sized {
-    XY(&'a D, &'a D),
-    Y(&'a D),
+enum PlotData<D> {
+    XY(D, D),
+    Y(D),
 }
 
 #[derive(Clone)]
@@ -549,10 +543,10 @@ impl<'a> PlotOptions<'a> {
     }
 
     fn plot_xy<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-                  x: &D, y: &D) -> Line2D
-    where D: Data + ?Sized {
-        let xn = x.to_numpy(py, numpy);
-        let yn = y.to_numpy(py, numpy);
+                  x: D, y: D) -> Line2D
+    where D: AsRef<[f64]> {
+        let xn = numpy.ndarray(py, x);
+        let yn = numpy.ndarray(py, y);
         let lines = axes.ax.call_method(py,
             "plot", (xn, yn, self.fmt), Some(self.kwargs(py))).unwrap();
         let lines: &PyList = lines.downcast(py).unwrap();
@@ -562,9 +556,9 @@ impl<'a> PlotOptions<'a> {
     }
 
     fn plot_y<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-                 y: &D) -> Line2D
-    where D: Data + ?Sized {
-        let yn = y.to_numpy(py, numpy);
+                 y: D) -> Line2D
+    where D: AsRef<[f64]> {
+        let yn = numpy.ndarray(py, y);
         let lines = axes.ax.call_method(py,
             "plot", (yn, self.fmt), Some(self.kwargs(py))).unwrap();
         let lines: &PyList = lines.downcast(py).unwrap();
@@ -573,13 +567,13 @@ impl<'a> PlotOptions<'a> {
     }
 
     fn plot_data<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-                    data: &PlotData<'_, D>) -> Line2D
-    where D: Data + ?Sized {
+                    data: &PlotData<D>) -> Line2D
+    where D: AsRef<[f64]> {
         match data {
             PlotData::XY(x, y) => {
-                self.plot_xy(py, numpy, axes, *x, *y) }
+                self.plot_xy(py, numpy, axes, x, y) }
             PlotData::Y(y) => {
-                self.plot_y(py, numpy, axes, *y) }
+                self.plot_y(py, numpy, axes, y) }
         }
     }
 
@@ -619,15 +613,14 @@ macro_rules! set_plotoptions { () => {
 }}
 
 #[must_use]
-pub struct XY<'a, D>
-where D: ?Sized {
+pub struct XY<'a, D> {
     axes: &'a Axes,
     options: PlotOptions<'a>,
-    data: PlotData<'a, D>,
+    data: PlotData<D>,
 }
 
 impl<'a, D> XY<'a, D>
-where D: Data + ?Sized {
+where D: AsRef<[f64]> {
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XY`].
