@@ -19,7 +19,7 @@ use pyo3::{
     prelude::*,
     intern,
     exceptions::{PyFileNotFoundError, PyPermissionError},
-    types::{IntoPyDict, PyDict, PyList},
+    types::{PyDict, PyList},
 };
 use numpy::{
     PyArray1,
@@ -484,9 +484,31 @@ impl Axes {
         self
     }
 
-    pub fn legend(&mut self) -> &mut Self {
-        meth!(self.ax, legend, ()).unwrap();
-        self
+    /// Place a legend on the Axes whose elements are taken from
+    /// `lines`.  If `lines` is empty, the elements are automatically
+    /// determined from the labels specified to the axis plots.
+    pub fn legend<L, U>(&mut self, lines: L) -> &mut Self
+    where L: IntoIterator<Item=Line2D, IntoIter = U>,
+          U: ExactSizeIterator<Item = Line2D>
+    {
+        Python::with_gil(|py| {
+            let elements = lines.into_iter().map(|l| l.line2d);
+            let kwargs;
+            if elements.len() == 0 { // FIXME: .is_empty is unstable
+                kwargs = None;
+            } else {
+                let dic = PyDict::new(py);
+                dic.set_item("handles", PyList::new(py, elements)).unwrap();
+                kwargs = Some(dic)
+            }
+            self.ax.call_method(py, intern!(py, "legend"), (), kwargs)
+                .unwrap();
+            self
+        })
+    }
+
+    pub fn twinx(&mut self) -> Axes {
+        Axes { ax: meth!(self.ax, twinx, ()).unwrap() }
     }
 }
 
@@ -688,19 +710,32 @@ where F: FnMut(f64) -> f64 {
 
 
 impl Line2D {
-    fn set_kw<'a, I>(&'a self, kwargs: I) -> &'a Self
-    where I: IntoPyDict {
+    fn set_kw(&self, prop: &str, v: impl ToPyObject) {
         Python::with_gil(|py| {
-            let kwargs = Some(kwargs.into_py_dict(py));
-            for l in self.line2d.as_ref(py).iter() {
-                l.call_method("set", (), kwargs).unwrap();
-            }
-        });
+            let kwargs = PyDict::new(py);
+            kwargs.set_item(prop, v).unwrap();
+            self.line2d.call_method(py, "set", (), Some(kwargs)).unwrap();
+        })
+    }
+
+    pub fn set_label(&mut self, label: &str) -> &mut Self {
+        self.set_kw("label", label);
         self
     }
 
-    pub fn label(&self, label: &str) -> &Self {
-        self.set_kw([("label", label)])
+    pub fn set_color(&mut self, c: f64) -> &mut Self {
+        meth!(self.line2d, set_color, (c,)).unwrap();
+        self
+    }
+
+    pub fn set_linewidth(&mut self, w: f64) -> &mut Self {
+        self.set_kw("linewidth", w);
+        self
+    }
+
+    pub fn linewidth(self, w: f64) -> Self {
+        self.set_kw("linewidth", w);
+        self
     }
 }
 
