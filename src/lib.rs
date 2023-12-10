@@ -12,7 +12,6 @@
 use std::{
     borrow::Borrow,
     fmt::{Display, Formatter},
-    mem::swap,
     path::Path,
 };
 use lazy_static::lazy_static;
@@ -163,6 +162,8 @@ impl<T> Data for T where T: AsRef<[f64]> {
     }
 }
 
+/// Container for most of the (sub-)plot elements: Axis, Tick,
+/// [`Line2D`], Text, Polygon, etc., and sets the coordinate system.
 #[derive(Debug, Clone)]
 pub struct Axes {
     ax: PyObject,
@@ -174,13 +175,18 @@ pub struct Figure {
     fig: PyObject, // instance of matplotlib.figure.Figure
 }
 
+/// A line — the line can have both a solid linestyle connecting all
+/// the vertices, and a marker at each vertex. Additionally, the
+/// drawing of the solid line is influenced by the drawstyle, e.g.,
+/// one can create "stepped" lines in various styles.
 pub struct Line2D {
-    line2d: Py<PyList>,
+    line2d: PyObject,
 }
 
 #[inline(always)]
 fn grid<const R: usize, const C: usize, U>(
-    f: impl Fn(usize, usize) -> U) -> [[U; C]; R] {
+    f: impl Fn(usize, usize) -> U) -> [[U; C]; R]
+{
     let mut r = 0;
     [(); R].map(|_| {
         let mut c = 0;
@@ -372,7 +378,7 @@ impl Axes {
         XY { axes: self,
              options: PlotOptions::new(),
              data: PlotData::XY(x, y),
-             prev_data: vec![] }
+        }
     }
 
     /// Plot `y` versus its indices as lines and/or markers.
@@ -392,7 +398,7 @@ impl Axes {
         XY { axes: self,
              options: PlotOptions::new(),
              data: PlotData::Y(y),
-             prev_data: vec![] }
+        }
     }
 
     /// Convenience function to plot X-Y coordinates coming from `xy`.
@@ -521,23 +527,31 @@ impl<'a> PlotOptions<'a> {
     }
 
     fn plot_xy<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-        x: &D, y: &D)
+                  x: &D, y: &D) -> Line2D
     where D: Data + ?Sized {
         let xn = x.to_numpy(py, numpy);
         let yn = y.to_numpy(py, numpy);
-        axes.ax.call_method(py, "plot", (xn, yn, self.fmt),
-                            Some(self.kwargs(py))).unwrap();
+        let lines = axes.ax.call_method(py,
+            "plot", (xn, yn, self.fmt), Some(self.kwargs(py))).unwrap();
+        let lines: &PyList = lines.downcast(py).unwrap();
+        // Extract the element from the list of length 1 (1 data plotted)
+        let line2d = lines.get_item(0).unwrap().into();
+        Line2D { line2d }
     }
 
-    fn plot_y<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes, y: &D)
+    fn plot_y<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
+                 y: &D) -> Line2D
     where D: Data + ?Sized {
         let yn = y.to_numpy(py, numpy);
-        axes.ax.call_method(py, "plot", (yn, self.fmt),
-                            Some(self.kwargs(py))).unwrap();
+        let lines = axes.ax.call_method(py,
+            "plot", (yn, self.fmt), Some(self.kwargs(py))).unwrap();
+        let lines: &PyList = lines.downcast(py).unwrap();
+        let line2d = lines.get_item(0).unwrap().into();
+        Line2D { line2d }
     }
 
     fn plot_data<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-        data: &PlotData<'_, D>)
+                    data: &PlotData<'_, D>) -> Line2D
     where D: Data + ?Sized {
         match data {
             PlotData::XY(x, y) => {
@@ -585,11 +599,8 @@ macro_rules! set_plotoptions { () => {
 pub struct XY<'a, D>
 where D: ?Sized {
     axes: &'a Axes,
-    // Latest data and its setting.
     options: PlotOptions<'a>,
     data: PlotData<'a, D>,
-    // Previous data with their settings.
-    prev_data: Vec<(PlotOptions<'a>, PlotData<'a, D>)>,
 }
 
 impl<'a, D> XY<'a, D>
@@ -597,35 +608,15 @@ where D: Data + ?Sized {
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XY`].
-    pub fn plot(self) {
+    pub fn plot(self) -> Line2D {
         let numpy = pymod!(NUMPY).unwrap();
         Python::with_gil(|py| {
-            for (opt, data) in self.prev_data.iter() {
-                opt.plot_data(py, numpy, self.axes, data)
-            }
             self.options.plot_data(py, numpy, self.axes, &self.data)
         })
     }
-
-    /// Add the dataset (`x`, `y`).
-    #[must_use]
-    pub fn xy(&mut self, x: &'a D, y: &'a D) -> &mut Self {
-        let mut data = PlotData::XY(x, y);
-        swap(&mut data, &mut self.data);
-        self.prev_data.push((self.options.clone(), data));
-        self
-    }
-
-    /// Add the dataset `y`.
-    #[must_use]
-    pub fn y(&mut self, y: &'a D) -> &mut Self {
-        let mut data = PlotData::Y(y);
-        swap(&mut data, &mut self.data);
-        self.prev_data.push((self.options.clone(), data));
-        self
-    }
 }
 
+#[must_use]
 pub struct XYFrom<'a, I> {
     axes: &'a Axes,
     options: PlotOptions<'a>,
@@ -638,7 +629,7 @@ where I: IntoIterator,
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XYFrom`].
-    pub fn plot(self) {
+    pub fn plot(self) -> Line2D {
         let data = self.data.into_iter();
         let n = data.size_hint().0;
         let mut x = Vec::with_capacity(n);
@@ -673,7 +664,7 @@ where F: FnMut(f64) -> f64 {
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XY`].
-    pub fn plot(mut self) {
+    pub fn plot(mut self) -> Line2D {
         let s = Sampling::fun(&mut self.f, self.a, self.b)
             .n(self.n).build();
         // Ensure `x` and `y` live to the end of the call to "plot".
