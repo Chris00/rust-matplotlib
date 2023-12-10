@@ -143,6 +143,7 @@ pub struct Numpy {
 
 impl Numpy {
     /// Convert `vec` to a numpy.ndarray (without copying).
+    /// ⚠ The result depends on `x` to still exist as they share data.
     fn ndarray(&self, py: Python, x: impl AsRef<[f64]>) -> PyObject {
         let x = x.as_ref();
         // ctypes.POINTER(ctypes.c_double)
