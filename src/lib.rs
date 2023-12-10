@@ -542,25 +542,20 @@ impl<'a> PlotOptions<'a> {
         kwargs
     }
 
-    fn plot_xy<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-                  x: D, y: D) -> Line2D
-    where D: AsRef<[f64]> {
-        let xn = numpy.ndarray(py, x);
-        let yn = numpy.ndarray(py, y);
+    /// Plot the ndarrays `x` and `y` and return the corresponding line.
+    fn plot_xy(&self, py: Python<'_>, axes: &Axes,
+               x: PyObject, y: PyObject) -> Line2D {
         let lines = axes.ax.call_method(py,
-            "plot", (xn, yn, self.fmt), Some(self.kwargs(py))).unwrap();
+            "plot", (x, y, self.fmt), Some(self.kwargs(py))).unwrap();
         let lines: &PyList = lines.downcast(py).unwrap();
         // Extract the element from the list of length 1 (1 data plotted)
         let line2d = lines.get_item(0).unwrap().into();
         Line2D { line2d }
     }
 
-    fn plot_y<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-                 y: D) -> Line2D
-    where D: AsRef<[f64]> {
-        let yn = numpy.ndarray(py, y);
+    fn plot_y(&self, py: Python<'_>, axes: &Axes, y: PyObject) -> Line2D {
         let lines = axes.ax.call_method(py,
-            "plot", (yn, self.fmt), Some(self.kwargs(py))).unwrap();
+            "plot", (y, self.fmt), Some(self.kwargs(py))).unwrap();
         let lines: &PyList = lines.downcast(py).unwrap();
         let line2d = lines.get_item(0).unwrap().into();
         Line2D { line2d }
@@ -571,9 +566,12 @@ impl<'a> PlotOptions<'a> {
     where D: AsRef<[f64]> {
         match data {
             PlotData::XY(x, y) => {
-                self.plot_xy(py, numpy, axes, x, y) }
+                let x = numpy.ndarray(py, x);
+                let y = numpy.ndarray(py, y);
+                self.plot_xy(py, axes, x, y) }
             PlotData::Y(y) => {
-                self.plot_y(py, numpy, axes, y) }
+                let y = numpy.ndarray(py, y);
+                self.plot_y(py, axes, y) }
         }
     }
 
@@ -657,7 +655,9 @@ where I: IntoIterator,
         }
         let numpy = pymod!(NUMPY).unwrap();
         Python::with_gil(|py| {
-            self.options.plot_xy(py, numpy, self.axes, &x, &y) })
+            let x = numpy.ndarray(py, x);
+            let y = numpy.ndarray(py, y);
+            self.options.plot_xy(py, self.axes, x, y) })
     }
 }
 
@@ -688,7 +688,9 @@ where F: FnMut(f64) -> f64 {
         let y = s.y();
         let numpy = pymod!(NUMPY).unwrap();
         Python::with_gil(|py| {
-            self.options.plot_xy(py, numpy, self.axes, &x, &y)
+            let x = numpy.ndarray(py, x);
+            let y = numpy.ndarray(py, y);
+            self.options.plot_xy(py, self.axes, x, y)
         })
     }
 
