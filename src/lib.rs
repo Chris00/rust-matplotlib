@@ -811,4 +811,15 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    //#[compile_fail]
+    fn data_in_scope() -> Result<(), Error> {
+        let (fig, [[mut ax]]) = subplots()?;
+        // let l = ax.y(&vec![1., 2.]);
+        // l.plot();
+        ax.y(&vec![1., 2.]).plot();
+        fig.save().to_file("target/data_in_scope.pdf")?;
+        Ok(())
+    }
+
 }
