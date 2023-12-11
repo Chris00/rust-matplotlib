@@ -642,9 +642,35 @@ pub struct XYFrom<'a, I> {
     data: I,
 }
 
+pub trait CoordXY {
+    fn x(&self) -> f64;
+    fn y(&self) -> f64;
+}
+
+impl<T> CoordXY for &T where T: CoordXY {
+    #[inline]
+    fn x(&self) -> f64 { (*self).x() }
+    #[inline]
+    fn y(&self) -> f64 { (*self).y() }
+}
+
+impl CoordXY for (f64, f64) {
+    #[inline]
+    fn x(&self) -> f64 { self.0 }
+    #[inline]
+    fn y(&self) -> f64 { self.1 }
+}
+
+impl CoordXY for [f64; 2] {
+    #[inline]
+    fn x(&self) -> f64 { self[0] }
+    #[inline]
+    fn y(&self) -> f64 { self[1] }
+}
+
 impl<'a, I> XYFrom<'a, I>
 where I: IntoIterator,
-      <I as IntoIterator>::Item: Borrow<(f64, f64)> {
+      <I as IntoIterator>::Item: CoordXY {
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XYFrom`].
@@ -654,9 +680,8 @@ where I: IntoIterator,
         let mut x = Vec::with_capacity(n);
         let mut y = Vec::with_capacity(n);
         for di in data {
-            let &(xi, yi) = di.borrow();
-            x.push(xi);
-            y.push(yi);
+            x.push(di.x());
+            y.push(di.y());
         }
         let x = Pin::new(x.as_slice());
         let y = Pin::new(y.as_slice());
