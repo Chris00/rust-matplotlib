@@ -451,8 +451,8 @@ impl Axes {
     }
 
     /// Set the title to `txt` for the Axes.
-    pub fn set_title(&mut self, txt: &str) -> &mut Self {
-        meth!(self.ax, set_title, (txt,)).unwrap();
+    pub fn set_title(&mut self, txt: impl AsRef<str>) -> &mut Self {
+        meth!(self.ax, set_title, (txt.as_ref(),)).unwrap();
         self
     }
 
@@ -468,13 +468,13 @@ impl Axes {
         self
     }
 
-    pub fn set_xlabel(&mut self, label: &str) -> &mut Self {
-        meth!(self.ax, set_xlabel, (label,)).unwrap();
+    pub fn set_xlabel(&mut self, label: impl AsRef<str>) -> &mut Self {
+        meth!(self.ax, set_xlabel, (label.as_ref(),)).unwrap();
         self
     }
 
-    pub fn set_ylabel(&mut self, label: &str) -> &mut Self {
-        meth!(self.ax, set_ylabel, (label,)).unwrap();
+    pub fn set_ylabel(&mut self, label: impl AsRef<str>) -> &mut Self {
+        meth!(self.ax, set_ylabel, (label.as_ref(),)).unwrap();
         self
     }
 
@@ -745,8 +745,8 @@ impl Line2D {
         })
     }
 
-    pub fn set_label(&mut self, label: &str) -> &mut Self {
-        self.set_kw("label", label);
+    pub fn set_label(&mut self, label: impl AsRef<str>) -> &mut Self {
+        self.set_kw("label", label.as_ref());
         self
     }
 
