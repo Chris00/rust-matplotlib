@@ -726,7 +726,7 @@ where F: FnMut(f64) -> f64 {
 
     /// Set the maximum number of evaluations of the function to build
     /// the sampling.  Panic if `n` < 2.
-    pub fn n(&mut self, n: usize) -> &mut Self {
+    pub fn n(mut self, n: usize) -> Self {
         if n < 2 {
             panic!("matplotlib::Fun::n: at least two points are required.");
         }
