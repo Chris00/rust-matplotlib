@@ -463,16 +463,19 @@ impl Axes {
         self
     }
 
+    /// Configure the grid lines.
     pub fn grid(&mut self) -> &mut Self {
         meth!(self.ax, grid, (true,)).unwrap();
         self
     }
 
+    /// Set the label for the X-axis.
     pub fn set_xlabel(&mut self, label: impl AsRef<str>) -> &mut Self {
         meth!(self.ax, set_xlabel, (label.as_ref(),)).unwrap();
         self
     }
 
+    /// Set the label for the Y-axis.
     pub fn set_ylabel(&mut self, label: impl AsRef<str>) -> &mut Self {
         meth!(self.ax, set_ylabel, (label.as_ref(),)).unwrap();
         self
@@ -605,6 +608,8 @@ macro_rules! set_plotoptions { () => {
         self
     }
 
+    /// Label the plot with `label`.  Note that labels are not shown
+    /// by default; one must call [`Axes::legend`] to display them.
     #[must_use]
     pub fn label(mut self, label: impl Into<Cow<'a, str>>) -> Self {
         self.options.label = label.into();
@@ -618,6 +623,7 @@ macro_rules! set_plotoptions { () => {
     }
 }}
 
+/// Options to plot X-Y data.  Created by [`Axes::xy`] and [`Axes::y`].
 #[must_use]
 pub struct XY<'a, D> {
     axes: &'a Axes,
@@ -638,6 +644,7 @@ where D: AsRef<[f64]> {
     }
 }
 
+/// Options to plot X-Y data.  Created by [`Axes::xy_from`].
 #[must_use]
 pub struct XYFrom<'a, I> {
     axes: &'a Axes,
@@ -695,6 +702,7 @@ where I: IntoIterator,
 }
 
 /// Options to plot functions (require the library [curve-sampling][]).
+/// Created by [`Axes::fun`].
 ///
 /// [curve-sampling]: https://crates.io/crates/curve-sampling
 #[must_use]
