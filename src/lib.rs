@@ -11,7 +11,7 @@
 
 use std::{
     fmt::{Display, Formatter},
-    path::Path, pin::Pin,
+    path::Path, pin::Pin, borrow::Cow,
 };
 use lazy_static::lazy_static;
 use pyo3::{
@@ -516,14 +516,16 @@ struct PlotOptions<'a> {
     fmt: &'a str,
     animated: bool,
     antialiased: bool,
-    label: &'a str,
+    label: Cow<'a, str>,
     linewidth: Option<f64>,
 }
 
 impl<'a> PlotOptions<'a> {
     fn new() -> PlotOptions<'static> {
-        PlotOptions { fmt: "", animated: false, antialiased: true,
-                      label: "", linewidth: None }
+        PlotOptions {
+            fmt: "", animated: false, antialiased: true,
+            label: Cow::Borrowed(""), linewidth: None
+        }
     }
 
     fn kwargs(&'a self, py: Python<'a>) -> &'a PyDict {
@@ -533,7 +535,8 @@ impl<'a> PlotOptions<'a> {
         }
         kwargs.set_item("antialiased", self.antialiased).unwrap();
         if !self.label.is_empty() {
-            kwargs.set_item("label", self.label).unwrap()
+            let label: &str = self.label.as_ref();
+            kwargs.set_item("label", label).unwrap()
         }
         if let Some(w) = self.linewidth {
             kwargs.set_item("linewidth", w).unwrap()
@@ -603,8 +606,8 @@ macro_rules! set_plotoptions { () => {
     }
 
     #[must_use]
-    pub fn label(mut self, label: &'a str) -> Self {
-        self.options.label = label;
+    pub fn label(mut self, label: impl Into<Cow<'a, str>>) -> Self {
+        self.options.label = label.into();
         self
     }
 
@@ -778,6 +781,19 @@ mod tests {
         dbg!(&fig);
         ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         fig.save().to_file("target/a_basic.pdf")?;
+        Ok(())
+    }
+
+    #[test]
+    fn a_basic_label() -> Result<(), Error> {
+        let (fig, [[mut ax]]) = subplots()?;
+        dbg!(&fig);
+        ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.])
+            .label("first").plot();
+        ax.xy(&[1., 2., 3., 4.], &[4., 2., 3., 1.])
+            .label("second".to_string()).plot();
+        ax.legend([]);
+        fig.save().to_file("target/a_basic_label.pdf")?;
         Ok(())
     }
 
