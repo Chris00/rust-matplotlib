@@ -563,13 +563,15 @@ struct PlotOptions<'a> {
     antialiased: bool,
     label: Cow<'a, str>,
     linewidth: Option<f64>,
+    color: Cow<'a, str>,
 }
 
 impl<'a> PlotOptions<'a> {
     fn new() -> PlotOptions<'static> {
         PlotOptions {
             fmt: "", animated: false, antialiased: true,
-            label: Cow::Borrowed(""), linewidth: None
+            label: Cow::Borrowed(""), linewidth: None,
+            color: "".into(),
         }
     }
 
@@ -585,6 +587,10 @@ impl<'a> PlotOptions<'a> {
         }
         if let Some(w) = self.linewidth {
             kwargs.set_item("linewidth", w).unwrap()
+        }
+        if !self.color.is_empty() {
+            let color: &str = self.color.as_ref();
+            kwargs.set_item("color", color).unwrap()
         }
         kwargs
     }
@@ -661,6 +667,12 @@ macro_rules! set_plotoptions { () => {
     #[must_use]
     pub fn linewidth(mut self, w: f64) -> Self {
         self.options.linewidth = Some(w);
+        self
+    }
+
+    #[must_use]
+    pub fn color(mut self, color: impl Into<Cow<'a, str>>) -> Self {
+        self.options.color = color.into();
         self
     }
 }}
