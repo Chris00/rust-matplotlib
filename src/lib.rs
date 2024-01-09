@@ -480,6 +480,37 @@ impl Axes {
         self
     }
 
+    /// Set the X-axis view limits.
+    pub fn set_xlim(&mut self, x_min: f64, x_max: f64) {
+        let left = if x_min.is_finite() {
+            Some(x_min)
+        } else {
+            None
+        };
+        let right = if x_max.is_finite() {
+            Some(x_max)
+        } else {
+            None
+        };
+        meth!(self.ax, set_xlim, (left, right)).unwrap();
+        // FIXME: return the value of the Python call?
+    }
+
+    /// Set the Y-axis view limits.
+    pub fn set_ylim(&mut self, y_min: f64, y_max: f64) {
+        let bottom = if y_min.is_finite() {
+            Some(y_min)
+        } else {
+            None
+        };
+        let top = if y_max.is_finite() {
+            Some(y_max)
+        } else {
+            None
+        };
+        meth!(self.ax, set_ylim, (bottom, top)).unwrap();
+    }
+
     /// Set the label for the X-axis.
     pub fn set_xlabel(&mut self, label: impl AsRef<str>) -> &mut Self {
         meth!(self.ax, set_xlabel, (label.as_ref(),)).unwrap();
