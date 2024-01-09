@@ -261,6 +261,17 @@ impl Figure {
     pub fn save(&self) -> Savefig {
         Savefig { fig: self.fig.clone(), dpi: None }
     }
+
+    /// Default width: 6.4, default height: 4.8
+    pub fn set_size_inches(&mut self, width: f64, height: f64) -> &mut Self {
+        Python::with_gil(|py| {
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("size_inches", (width, height)).unwrap();
+            self.fig.call_method(py, intern!(py, "set"), (),
+                Some(kwargs)).unwrap();
+        });
+        self
+    }
 }
 
 /// Options for saving figures.
