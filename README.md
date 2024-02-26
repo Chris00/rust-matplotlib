@@ -18,6 +18,9 @@ The binding is made using [PyO3][], thus you “[need to ensure that
 your Python installation contains a shared library][shared-lib]”.  Of
 course you also need [Matplotlib][] to be installed.
 
+If you encounter this error on MacOSX:
+dyld[37446]: Symbol not found: _PyBytes_AsString
+ensure the DYLD_LIBRARY_PATH contains your python lib directory
 
 Example
 -------
