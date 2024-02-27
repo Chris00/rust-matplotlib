@@ -839,7 +839,8 @@ mod tests {
 
     #[test]
     fn a_basic_pdf() -> Result<(), Error> {
-        let (fig, [[mut ax]]) = subplots()?;
+        let fig = Figure::new()?;
+        let [[mut ax]] = fig.subplots()?;
         dbg!(&fig);
         ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         fig.save().to_file("target/a_basic.pdf")?;
@@ -848,7 +849,8 @@ mod tests {
 
     #[test]
     fn a_basic_label() -> Result<(), Error> {
-        let (fig, [[mut ax]]) = subplots()?;
+        let fig = Figure::new()?;
+        let [[mut ax]] = fig.subplots()?;
         dbg!(&fig);
         ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.])
             .label("first").plot();
@@ -861,7 +863,8 @@ mod tests {
 
     #[test]
     fn a_basic_row() -> Result<(), Error> {
-        let (fig, [[mut ax0, mut ax1]]) = subplots()?;
+        let fig = Figure::new()?;
+        let [[mut ax0, mut ax1]] = fig.subplots()?;
         ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
         fig.save().to_file("target/a_basic_row.pdf")?;
@@ -870,7 +873,8 @@ mod tests {
 
     #[test]
     fn a_basic_col() -> Result<(), Error> {
-        let (fig, [[mut ax0], [mut ax1]]) = subplots()?;
+        let fig = Figure::new()?;
+        let [[mut ax0], [mut ax1]] = fig.subplots()?;
         ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
         fig.save().to_file("target/a_basic_col.pdf")?;
@@ -879,8 +883,9 @@ mod tests {
 
     #[test]
     fn a_basic_grid() -> Result<(), Error> {
-        let (fig, [[mut ax0, mut ax1],
-                   [mut ax2, mut ax3]]) = subplots()?;
+        let fig = Figure::new()?;
+        let [[mut ax0, mut ax1],
+             [mut ax2, mut ax3]] = fig.subplots()?;
         ax0.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
         ax1.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt(".").plot();
         ax2.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).fmt("r").plot();
@@ -892,7 +897,8 @@ mod tests {
     #[test]
     //#[compile_fail]
     fn data_in_scope() -> Result<(), Error> {
-        let (fig, [[mut ax]]) = subplots()?;
+        let fig = Figure::new()?;
+        let [[mut ax]] = fig.subplots()?;
         // let l = ax.y(&vec![1., 2.]);
         // l.plot();
         ax.y(&vec![1., 2.]).plot();
