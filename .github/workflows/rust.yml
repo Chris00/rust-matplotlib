@@ -50,19 +50,10 @@ jobs:
     - uses: actions/checkout@master
     - run: git submodule init
     - run: git submodule update
-    - name: Install Ubuntu packages
-      if: startsWith(matrix.os, 'ubuntu')
-      run: sudo apt-get -y install python3
-    - name: Set up vcpkg on Windows
-      if: startsWith(matrix.os, 'windows')
-      run: |
-        git clone https://github.com/microsoft/vcpkg
-        & .\vcpkg\bootstrap-vcpkg.bat
-        & .\vcpkg\vcpkg install python3
-    - name: Install MacOS packages (brew)
-      if: startsWith(matrix.os, 'macos')
-      run: brew install python
-    - name: Install Matplotlib
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Matplotlib (pip)
       run: pip install matplotlib
     - name: Install Rust (rustup)
       run: rustup update ${{ matrix.rust }} --no-self-update && rustup default ${{ matrix.rust }}
