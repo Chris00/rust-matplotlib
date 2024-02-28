@@ -19,13 +19,18 @@ your Python installation contains a shared library][shared-lib]”.  Of
 course you also need [Matplotlib][] to be installed.
 
 
-Example
--------
+A basic example
+---------------
 
 ```rust
-let (fig, [[mut ax]]) = Plot::sub()?;
-ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
-fig.savefig("plot.pdf")?;
+use matplotlib as plt;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (fig, [[mut ax]]) = plt::subplots()?;
+    ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
+	fig.save().to_file("basic_example.svg")?;
+    Ok(())
+}
 ```
 
 

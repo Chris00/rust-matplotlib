@@ -22,3 +22,6 @@ features = ["auto-initialize"]
 
 [features]
 default = ["curve-sampling"]
+
+[dev-dependencies]
+doc-comment = "0.3.3"
