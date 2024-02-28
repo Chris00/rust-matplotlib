@@ -29,7 +29,7 @@ fig.savefig("plot.pdf")?;
 ```
 
 
-![Basic Example](https://matplotlib.org/stable/_images/sphx_glr_quick_start_001_2_0x.png)
+![Basic Example](examples/basic_example.svg)
 
 
 [Matplotlib]: https://matplotlib.org/

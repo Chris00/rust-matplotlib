@@ -9,6 +9,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let y: Vec<_> = x.iter().map(|x| x.sin()).collect();
     ax.xy(&x, &y).fmt("r.").plot();
     // plt::show();
-    fig.save().to_file("examples/a_simple_example.svg")?;
+    fig.save().to_file("target/a_simple_example.svg")?;
     Ok(())
 }
