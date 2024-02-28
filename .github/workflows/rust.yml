@@ -26,6 +26,10 @@ jobs:
             os: ubuntu-latest
             rust: stable
             target: i686-unknown-linux-gnu
+          - build: Anaconda on Linux
+            os: ubuntu-latest
+            rust: stable
+            target: i686-unknown-linux-gnu
           - build: macos
             os: macos-latest
             rust: stable
@@ -54,7 +58,11 @@ jobs:
       with:
         python-version: '3.12'
     - name: Install Matplotlib (pip)
+      if: ${{ ! startsWith(matrix.build, 'Anaconda') }}
       run: pip install matplotlib
+    - name: Install Matplotlib (Anaconda)
+      if: startsWith(matrix.build, 'Anaconda')
+      run: $CONDA/bin/conda install matplotlib
     - name: Install Rust (rustup)
       run: rustup update ${{ matrix.rust }} --no-self-update && rustup default ${{ matrix.rust }}
       shell: bash
