@@ -62,7 +62,7 @@ jobs:
       run: pip install matplotlib
     - name: Install Matplotlib (Anaconda)
       if: startsWith(matrix.build, 'Anaconda')
-      run: $CONDA/bin/conda install matplotlib
+      run: $CONDA/bin/conda install conda-forge::matplotlib
     - name: Install Rust (rustup)
       run: rustup update ${{ matrix.rust }} --no-self-update && rustup default ${{ matrix.rust }}
       shell: bash
