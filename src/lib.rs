@@ -445,6 +445,29 @@ impl Axes {
     }
 
 
+    pub fn contour<'a>(&'a mut self, ) -> Contour<'a> {
+        Contour {
+            axes: self,
+            options: PlotOptions::new(),
+        }
+    }
+
+    pub fn contour_fun<'a, F>(
+        &'a mut self,
+        f: F,
+        ab: [f64; 2],
+        cd: [f64; 2],
+    ) -> ContourFun<'a, F>
+    where F: FnMut(f64, f64) -> f64 {
+        ContourFun {
+            axes: self,
+            options: PlotOptions::new(),
+            f, ab, cd,
+            n1: 100,
+            n2: 100,
+        }
+    }
+
     #[must_use]
     pub fn scatter<D>(&mut self, x: D, y: D) -> &mut Self
     where D: AsRef<[f64]> {
@@ -798,6 +821,36 @@ where F: FnMut(f64) -> f64 {
         self.n = n;
         self
     }
+}
+
+
+#[must_use]
+pub struct Contour<'a> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+}
+
+impl<'a> Contour<'a> {
+    set_plotoptions!();
+
+}
+
+
+#[must_use]
+pub struct ContourFun<'a, F> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    f: F,
+    ab: [f64; 2],
+    cd: [f64; 2],
+    n1: usize,
+    n2: usize,
+}
+
+impl<'a, F> ContourFun<'a, F>
+where F: FnMut(f64, f64) -> f64 {
+    set_plotoptions!();
+
 }
 
 
