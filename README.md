@@ -28,7 +28,7 @@ use matplotlib as plt;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (fig, [[mut ax]]) = plt::subplots()?;
     ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
-	fig.save().to_file("basic_example.svg")?;
+    fig.save().to_file("basic_example.svg")?;
     Ok(())
 }
 ```
