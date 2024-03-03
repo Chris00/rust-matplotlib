@@ -18,6 +18,18 @@ The binding is made using [PyO3][], thus you “[need to ensure that
 your Python installation contains a shared library][shared-lib]”.  Of
 course you also need [Matplotlib][] to be installed.
 
+If you installed Python and matplotlib using
+[anaconda](https://www.anaconda.com/), you must use [conda
+activate](https://docs.conda.io/projects/conda/en/latest/dev-guide/deep-dives/activation.html#conda-activate) to
+make sure the `PATH` is correct and also set `LD_LIBRARY_PATH` (on
+Unix) or `DYLD_LIBRARY_PATH` (on MacOSX) to the directory containing
+the Python shared library.  For example, in a bash shell:
+
+```bash
+eval "$(conda shell.bash activate)"
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
+```
+
 
 A basic example
 ---------------
