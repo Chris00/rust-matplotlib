@@ -748,6 +748,13 @@ impl CoordXY for (f64, f64) {
     fn y(&self) -> f64 { self.1 }
 }
 
+impl CoordXY for (Option<f64>, Option<f64>) {
+    #[inline]
+    fn x(&self) -> f64 { self.0.unwrap_or(f64::NAN) }
+    #[inline]
+    fn y(&self) -> f64 { self.1.unwrap_or(f64::NAN) }
+}
+
 impl CoordXY for [f64; 2] {
     #[inline]
     fn x(&self) -> f64 { self[0] }

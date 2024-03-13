@@ -22,13 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let x_col = df.column("Pseudacorus_Sepal_Length")?.f64()?;
     let y_col = df.column("Pseudacorus_Sepal_width")?.f64()?;
 
-    let x_values: Vec<f64> =
-        x_col.iter().map(|x| x.unwrap()).collect();
-    let y_values: Vec<f64> =
-        y_col.iter().map(|y| y.unwrap()).collect();
-    println!("x val {:?}", &x_values);
-    println!("y val {:?}", &y_values);
-    ax.xy(&x_values, &y_values).fmt(".").plot();
+    ax.xy_from(x_col.iter().zip(y_col)).fmt(".").plot();
     fig.save().to_file("flower.png")?;
     Ok(())
 }
