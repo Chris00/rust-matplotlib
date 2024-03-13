@@ -12,8 +12,6 @@ keywords = ["plot", "graph", "curve", "surface"]
 categories = ["science", "visualization", "mathematics", "graphics"]
 
 [dependencies]
-polars = "0.38.1"
-polars-core = "0.38.1"
 numpy = "0.20.0"
 curve-sampling = { version = "0.3", optional = true }
 lazy_static = "1.4.0"
@@ -27,3 +25,5 @@ default = ["curve-sampling"]
 
 [dev-dependencies]
 doc-comment = "0.3.3"
+polars = "0.38.1"
+polars-core = "0.38.1"
