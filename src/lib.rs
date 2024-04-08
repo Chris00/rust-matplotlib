@@ -11,6 +11,7 @@
 
 use std::{
     fmt::{Display, Formatter},
+    marker::PhantomData,
     path::Path, pin::Pin, borrow::Cow,
 };
 use lazy_static::lazy_static;
@@ -436,12 +437,18 @@ impl Axes {
     /// fig.save().to_file("target/Fun_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    pub fn fun<'a, F>(&'a mut self, f: F, a: f64, b: f64) -> Fun<'a, F>
-    where F: FnMut(f64) -> f64 {
-        Fun { axes: self,
-              options: PlotOptions::new(),
-              f, a, b,
-              n: 100 }
+    pub fn fun<'a, F, Y, D>(&'a mut self, f: F, a: f64, b: f64) -> Fun<'a, F, D>
+    where F: FnMut(f64) -> Y,
+          Y: curve_sampling::Img<D>,
+    {
+        Fun {
+            axes: self,
+            options: PlotOptions::new(),
+            f,
+            data: PhantomData,
+            a, b,
+            n: 100
+        }
     }
 
 
@@ -801,18 +808,22 @@ where I: IntoIterator,
 ///
 /// [curve-sampling]: https://crates.io/crates/curve-sampling
 #[must_use]
-pub struct Fun<'a, F> {
+pub struct Fun<'a, F, D>
+{
     axes: &'a Axes,
     options: PlotOptions<'a>,
     f: F,
+    data: PhantomData<D>, // Data produced by `f`.
     a: f64, // [a, b] is the interval on which we want to plot f.
     b: f64,
     n: usize,
 }
 
 #[cfg(feature = "curve-sampling")]
-impl<'a, F> Fun<'a, F>
-where F: FnMut(f64) -> f64 {
+impl<'a, F, Y, D> Fun<'a, F, D>
+where F: FnMut(f64) -> Y,
+      Y: curve_sampling::Img<D>,
+{
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XY`].
