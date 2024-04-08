@@ -586,6 +586,7 @@ struct PlotOptions<'a> {
     antialiased: bool,
     label: Cow<'a, str>,
     linewidth: Option<f64>,
+    markersize: Option<f64>,
     color: Cow<'a, str>,
 }
 
@@ -594,6 +595,7 @@ impl<'a> PlotOptions<'a> {
         PlotOptions {
             fmt: "", animated: false, antialiased: true,
             label: Cow::Borrowed(""), linewidth: None,
+            markersize: None,
             color: "".into(),
         }
     }
@@ -610,6 +612,9 @@ impl<'a> PlotOptions<'a> {
         }
         if let Some(w) = self.linewidth {
             kwargs.set_item("linewidth", w).unwrap()
+        }
+        if let Some(w) = self.markersize {
+            kwargs.set_item("markersize", w).unwrap()
         }
         if !self.color.is_empty() {
             let color: &str = self.color.as_ref();
@@ -690,6 +695,12 @@ macro_rules! set_plotoptions { () => {
     #[must_use]
     pub fn linewidth(mut self, w: f64) -> Self {
         self.options.linewidth = Some(w);
+        self
+    }
+
+    #[must_use]
+    pub fn markersize(mut self, w: f64) -> Self {
+        self.options.markersize = Some(w);
         self
     }
 
