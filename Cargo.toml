@@ -13,7 +13,7 @@ categories = ["science", "visualization", "mathematics", "graphics"]
 
 [dependencies]
 numpy = "0.20.0"
-curve-sampling = { version = "0.3", optional = true }
+curve-sampling = { version = "0.5", optional = true, git = "https://github.com/Chris00/rust-curve-sampling.git" }
 lazy_static = "1.4.0"
 
 [dependencies.pyo3]
