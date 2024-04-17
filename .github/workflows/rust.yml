@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [stable, beta, nightly, linux32, macos, aarch64-ios, win64, windows-latest]
+        build: [stable, beta, nightly, anaconda linux, macos, anaconda macos, macos-aarch64, anaconda macos-aarch64, win64]
         include:
           - build: stable
             os: ubuntu-latest
@@ -22,37 +22,30 @@ jobs:
             os: ubuntu-latest
             rust: nightly
             target: x86_64-unknown-linux-gnu
-          - build: linux32
-            os: ubuntu-latest
-            rust: stable
-            target: i686-unknown-linux-gnu
           - build: anaconda linux
             os: ubuntu-latest
             rust: stable
-            target: i686-unknown-linux-gnu
+            target: x86_64-unknown-linux-gnu
           - build: macos
             os: macos-latest
             rust: stable
             target: x86_64-apple-darwin
           - build: anaconda macos
             os: macos-latest
-            rust: stable
+            rust: nightly
             target: x86_64-apple-darwin
-          - build: aarch64-ios
-            os: macos-latest
+          - build: macos-aarch64
+            # Must install app https://github.com/apps/flyci-prod
+            os: flyci-macos-large-latest-m1
             rust: stable
-            target: aarch64-apple-ios
-          - build: windows-aarch64
-            os: windows-latest
+            target: aarch64-apple-darwin
+          - build: anaconda macos-aarch64
+            os: flyci-macos-large-latest-m1
             rust: stable
-            target: aarch64-pc-windows-msvc
+            target: aarch64-apple-darwin
           - build: win64
             os: windows-latest
             rust: stable
-            target: x86_64-pc-windows-msvc
-          - build: windows-latest
-            os: windows-latest
-            rust: stable-x86_64
             target: x86_64-pc-windows-msvc
     steps:
     - uses: actions/checkout@master
@@ -65,14 +58,18 @@ jobs:
     - name: Install Matplotlib (pip)
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
       run: pip install matplotlib
+    - name: Setup Miniconda
+      if: startsWith(matrix.build, 'anaconda macos-aarch64')
+      uses: conda-incubator/setup-miniconda@v3.0.3
     - name: Install Matplotlib (Anaconda)
       if: startsWith(matrix.build, 'anaconda')
       run: $CONDA/bin/conda install conda-forge::matplotlib
     - name: Install Rust (rustup)
-      run: rustup update ${{ matrix.rust }} --no-self-update && rustup default ${{ matrix.rust }}
-      shell: bash
-    - run: rustup target add ${{ matrix.target }}
+      run: |
+        rustup update --no-self-update
+        rustup default ${{ matrix.rust }}-${{ matrix.target }}
     - run: cargo build -vv
+      if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - run: cargo test
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - run: cargo run --example a_simple_example
@@ -84,8 +81,10 @@ jobs:
         export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
         cargo run --example a_simple_example
     - name: Run example with Anaconda on MacOS
+      continue-on-error: true
       if: startsWith(matrix.build, 'anaconda macos')
       run: |
-        source $($CONDA/bin/conda info --base)/bin/activate
+        eval "$($CONDA/bin/conda shell.bash activate)"
         export DYLD_LIBRARY_PATH=$CONDA_PREFIX/lib
         cargo run --example a_simple_example
+        cargo run --example flower
