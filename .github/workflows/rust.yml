@@ -59,7 +59,7 @@ jobs:
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
       run: pip install matplotlib
     - name: Setup Miniconda
-      if: startsWith(matrix.build, 'anaconda macos-aarch64')
+      if: startsWith(matrix.build, 'anaconda macos')
       uses: conda-incubator/setup-miniconda@v3.0.3
     - name: Install Matplotlib (Anaconda)
       if: startsWith(matrix.build, 'anaconda')
