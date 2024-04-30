@@ -24,6 +24,7 @@ use pyo3::{
 use numpy::{
     PyArray1,
     PyArray2,
+    PyArrayMethods,
 };
 
 #[cfg(feature = "curve-sampling")]
@@ -36,29 +37,10 @@ macro_rules! getattr {
 }
 
 macro_rules! meth {
-    ($obj: expr, $m: ident, $py: ident -> $args: expr,
-     $e: ident -> $err: expr) => {
-        Python::with_gil(|py| {
-            let $py = py;
-            $obj.call_method1(py, intern!(py, stringify!($m)), $args)
-                .map_err(|$e| $err)
-        })
-    };
-    ($obj: expr, $m: ident, $py: ident -> $args: expr, $kwargs: expr) => {
-        Python::with_gil(|py| {
-            let $py = py;
-            $obj.call_method(py, intern!(py, stringify!($m)), $args, $kwargs)
-        })
-    };
     ($obj: expr, $m: ident, $py: ident -> $args: expr) => {
         Python::with_gil(|py| {
             let $py = py;
             $obj.call_method1(py, intern!(py, stringify!($m)), $args)
-        })
-    };
-    ($obj: expr, $m: ident, $args: expr, $kwargs: expr) => {
-        Python::with_gil(|py| {
-            $obj.call_method(py, intern!(py, stringify!($m)), $args, $kwargs)
         })
     };
     ($obj: expr, $m: ident, $args: expr) => {
@@ -106,7 +88,7 @@ impl std::error::Error for Error {}
 /// Import and return a handle to the module `$m`.
 macro_rules! pyimport { ($m: literal) => {
     Python::with_gil(|py|
-        PyModule::import(py, intern!(py, $m)).map(|m| m.into()))
+        PyModule::import_bound(py, intern!(py, $m)).map(|m| m.into()))
 }}
 
 lazy_static! {
@@ -220,19 +202,22 @@ impl Figure {
                 if C == 1 {
                     axes = grid(|_,_| Axes { ax: axs.clone() });
                 } else { // C > 1
-                    let axg: &PyArray1<PyObject> = axs.downcast(py).unwrap();
+                    let axg: &Bound<PyArray1<PyObject>> =
+                        axs.downcast_bound(py).unwrap();
                     axes = grid(|_,c| {
                         let ax = axg.get_owned(c).unwrap();
                         Axes { ax } });
                 }
             } else { // R > 1
                 if C == 1 {
-                    let axg: &PyArray1<PyObject> = axs.downcast(py).unwrap();
+                    let axg: &Bound<PyArray1<PyObject>> =
+                        axs.downcast_bound(py).unwrap();
                     axes = grid(|r,_| {
                         let ax = axg.get_owned(r).unwrap();
                         Axes { ax } });
                 } else { // C > 1
-                    let axg: &PyArray2<PyObject> = axs.downcast(py).unwrap();
+                    let axg: &Bound<PyArray2<PyObject>> =
+                        axs.downcast_bound(py).unwrap();
                     axes = grid(|r, c| {
                         let ax = axg.get_owned([r, c]).unwrap();
                         Axes { ax } });
@@ -266,10 +251,10 @@ impl Figure {
     /// Default width: 6.4, default height: 4.8
     pub fn set_size_inches(&mut self, width: f64, height: f64) -> &mut Self {
         Python::with_gil(|py| {
-            let kwargs = PyDict::new(py);
+            let kwargs = PyDict::new_bound(py);
             kwargs.set_item("size_inches", (width, height)).unwrap();
-            self.fig.call_method(py, intern!(py, "set"), (),
-                Some(kwargs)).unwrap();
+            self.fig.call_method_bound(py, intern!(py, "set"), (),
+                Some(&kwargs)).unwrap();
         });
         self
     }
@@ -294,13 +279,13 @@ impl Savefig {
 
     pub fn to_file(&self, path: impl AsRef<Path>) -> Result<(), Error> {
         Python::with_gil(|py| {
-            let kwargs = PyDict::new(py);
+            let kwargs = PyDict::new_bound(py);
             if let Some(dpi) = self.dpi {
                 kwargs.set_item("dpi", dpi).unwrap()
             }
-            self.fig.call_method(
+            self.fig.call_method_bound(
                 py, intern!(py, "savefig"),
-                (path.as_ref(),), Some(kwargs)
+                (path.as_ref(),), Some(&kwargs)
             ).map_err(|e| {
                     if e.is_instance_of::<PyFileNotFoundError>(py) {
                         Error::FileNotFoundError
@@ -562,16 +547,17 @@ impl Axes {
     {
         Python::with_gil(|py| {
             let elements = lines.into_iter().map(|l| l.line2d);
-            let kwargs;
             if elements.len() == 0 { // FIXME: .is_empty is unstable
-                kwargs = None;
+                self.ax.call_method_bound(py, intern!(py, "legend"), (), None)
+                    .unwrap();
             } else {
-                let dic = PyDict::new(py);
-                dic.set_item("handles", PyList::new(py, elements)).unwrap();
-                kwargs = Some(dic)
+                let dic = PyDict::new_bound(py);
+                dic.set_item("handles", PyList::new_bound(py, elements))
+                    .unwrap();
+                self.ax.call_method_bound(py, intern!(py, "legend"), (),
+                    Some(&dic))
+                    .unwrap();
             }
-            self.ax.call_method(py, intern!(py, "legend"), (), kwargs)
-                .unwrap();
             self
         })
     }
@@ -607,8 +593,8 @@ impl<'a> PlotOptions<'a> {
         }
     }
 
-    fn kwargs(&'a self, py: Python<'a>) -> &'a PyDict {
-        let kwargs = PyDict::new(py);
+    fn kwargs(&'a self, py: Python<'a>) -> Bound<PyDict> {
+        let kwargs = PyDict::new_bound(py);
         if self.animated {
             kwargs.set_item("animated", true).unwrap()
         }
@@ -636,9 +622,9 @@ impl<'a> PlotOptions<'a> {
     {
         let x = numpy.ndarray(py, x);
         let y = numpy.ndarray(py, y);
-        let lines = axes.ax.call_method(py,
-            "plot", (x, y, self.fmt), Some(self.kwargs(py))).unwrap();
-        let lines: &PyList = lines.downcast(py).unwrap();
+        let lines = axes.ax.call_method_bound(py,
+            "plot", (x, y, self.fmt), Some(&self.kwargs(py))).unwrap();
+        let lines: &Bound<PyList> = lines.downcast_bound(py).unwrap();
         // Extract the element from the list of length 1 (1 data plotted)
         let line2d = lines.get_item(0).unwrap().into();
         Line2D { line2d }
@@ -648,9 +634,9 @@ impl<'a> PlotOptions<'a> {
               y: Pin<&[f64]>) -> Line2D
     {
         let y = numpy.ndarray(py, y);
-        let lines = axes.ax.call_method(py,
-            "plot", (y, self.fmt), Some(self.kwargs(py))).unwrap();
-        let lines: &PyList = lines.downcast(py).unwrap();
+        let lines = axes.ax.call_method_bound(py,
+            "plot", (y, self.fmt), Some(&self.kwargs(py))).unwrap();
+        let lines: &Bound<PyList> = lines.downcast_bound(py).unwrap();
         let line2d = lines.get_item(0).unwrap().into();
         Line2D { line2d }
     }
@@ -886,9 +872,10 @@ where F: FnMut(f64, f64) -> f64 {
 impl Line2D {
     fn set_kw(&self, prop: &str, v: impl ToPyObject) {
         Python::with_gil(|py| {
-            let kwargs = PyDict::new(py);
+            let kwargs = PyDict::new_bound(py);
             kwargs.set_item(prop, v).unwrap();
-            self.line2d.call_method(py, "set", (), Some(kwargs)).unwrap();
+            self.line2d.call_method_bound(py, "set", (), Some(&kwargs))
+                .unwrap();
         })
     }
 
