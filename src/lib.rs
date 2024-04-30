@@ -19,13 +19,16 @@ use pyo3::{
     prelude::*,
     intern,
     exceptions::{PyFileNotFoundError, PyPermissionError},
-    types::{PyDict, PyList},
+    types::{PyDict, PyList, PyTuple},
 };
 use numpy::{
     PyArray1,
     PyArray2,
     PyArrayMethods,
 };
+
+pub mod colors;
+use colors::Color;
 
 #[cfg(feature = "curve-sampling")]
 use curve_sampling::Sampling;
@@ -353,9 +356,12 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib as plt;
+    /// use matplotlib::{self as plt, colors};
     /// let (fig, [[mut ax]]) = plt::subplots()?;
-    /// ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.]).plot();
+    /// let x = [1., 2., 3., 4.];
+    /// let y = [1., 4., 2., 3.];
+    /// ax.xy(&x, &y).fmt("-").color(colors::Base::R).plot();
+    /// ax.xy(&x, &y).fmt("bo").plot();
     /// fig.save().to_file("target/XY_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
@@ -580,7 +586,7 @@ struct PlotOptions<'a> {
     label: Cow<'a, str>,
     linewidth: Option<f64>,
     markersize: Option<f64>,
-    color: Cow<'a, str>,
+    color: Option<[f64; 4]>, // RGBA, if specified
 }
 
 impl<'a> PlotOptions<'a> {
@@ -589,7 +595,7 @@ impl<'a> PlotOptions<'a> {
             fmt: "", animated: false, antialiased: true,
             label: Cow::Borrowed(""), linewidth: None,
             markersize: None,
-            color: "".into(),
+            color: None,
         }
     }
 
@@ -609,8 +615,8 @@ impl<'a> PlotOptions<'a> {
         if let Some(w) = self.markersize {
             kwargs.set_item("markersize", w).unwrap()
         }
-        if !self.color.is_empty() {
-            let color: &str = self.color.as_ref();
+        if let Some(rgba) = self.color {
+            let color = PyTuple::new_bound(py, rgba);
             kwargs.set_item("color", color).unwrap()
         }
         kwargs
@@ -697,9 +703,10 @@ macro_rules! set_plotoptions { () => {
         self
     }
 
+    /// Set the color of the plot.
     #[must_use]
-    pub fn color(mut self, color: impl Into<Cow<'a, str>>) -> Self {
-        self.options.color = color.into();
+    pub fn color(mut self, color: impl Color) -> Self {
+        self.options.color = Some(color.rgba());
         self
     }
 }}
@@ -884,9 +891,13 @@ impl Line2D {
         self
     }
 
-    pub fn set_color(&mut self, c: f64) -> &mut Self {
-        meth!(self.line2d, set_color, (c,)).unwrap();
-        self
+    /// Set the color of the line to `c`.
+    pub fn set_color(&mut self, c: impl Color) -> &mut Self {
+        Python::with_gil(|py| {
+            let c = PyTuple::new_bound(py, c.rgba());
+            meth!(self.line2d, set_color, (c,)).unwrap();
+            self
+        })
     }
 
     pub fn set_linewidth(&mut self, w: f64) -> &mut Self {
