@@ -13,44 +13,33 @@ jobs:
           - build: stable
             os: ubuntu-latest
             rust: stable
-            target: x86_64-unknown-linux-gnu
           - build: beta
             os: ubuntu-latest
             rust: beta
-            target: x86_64-unknown-linux-gnu
           - build: nightly
             os: ubuntu-latest
             rust: nightly
-            target: x86_64-unknown-linux-gnu
           - build: anaconda linux
             os: ubuntu-latest
             rust: stable
-            target: x86_64-unknown-linux-gnu
           - build: macos
             os: macos-latest
             rust: stable
-            target: x86_64-apple-darwin
           - build: anaconda macos
             os: macos-latest
             rust: nightly
-            target: x86_64-apple-darwin
           - build: macos-aarch64
             # Must install app https://github.com/apps/flyci-prod
             os: flyci-macos-large-latest-m1
             rust: stable
-            target: aarch64-apple-darwin
           - build: anaconda macos-aarch64
             os: flyci-macos-large-latest-m1
             rust: stable
-            target: aarch64-apple-darwin
           - build: win64
             os: windows-latest
             rust: stable
-            target: x86_64-pc-windows-msvc
     steps:
     - uses: actions/checkout@master
-    - run: git submodule init
-    - run: git submodule update
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
@@ -67,9 +56,8 @@ jobs:
     - name: Install Rust (rustup)
       run: |
         rustup update --no-self-update
-        rustup default ${{ matrix.rust }}-${{ matrix.target }}
-    - run: cargo build -vv
-      if: ${{ ! startsWith(matrix.build, 'anaconda') }}
+        rustup default ${{ matrix.rust }}
+    - run: cargo build -v
     - run: cargo test
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - run: cargo run --example a_simple_example
