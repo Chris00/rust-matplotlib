@@ -72,7 +72,7 @@ impl Display for Error {
         match self {
             Error::NoMatplotlib =>
                 write!(f, "The matplotlib library has not been found.\n\
-Please install it.  See https://matplotlib.or/\n\
+Please install it.  See https://matplotlib.org\n\
 If you use Anaconda, see https://github.com/PyO3/pyo3/issues/1554"),
             Error::FileNotFoundError =>
                 write!(f, "A path contains an element that is not a \
