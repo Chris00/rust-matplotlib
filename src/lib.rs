@@ -57,7 +57,7 @@ macro_rules! meth {
 #[derive(Debug)]
 pub enum Error {
     /// The Python library "matplotlib" was not found.
-    NoMatplotlib,
+    NoMatplotlib(String),
     /// The path contains an elelement that is not a directory or does
     /// not exist.
     FileNotFoundError,
@@ -70,8 +70,9 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Error::NoMatplotlib =>
+            Error::NoMatplotlib(e) =>
                 write!(f, "The matplotlib library has not been found.\n\
+Python Error: {e}\n\
 Please install it.  See https://matplotlib.org\n\
 If you use Anaconda, see https://github.com/PyO3/pyo3/issues/1554"),
             Error::FileNotFoundError =>
@@ -94,34 +95,44 @@ impl From<PyErr> for Error {
     }
 }
 
+#[derive(Debug)]
+struct ImportError(String);
+
+impl From<&ImportError> for Error {
+    fn from(e: &ImportError) -> Self {
+        Error::NoMatplotlib(e.0.clone())
+    }
+}
+
 /// Import and return a handle to the module `$m`.
 macro_rules! pyimport { ($m: literal) => {
     Python::with_gil(|py|
-        PyModule::import_bound(py, intern!(py, $m)).map(|m| m.into()))
+        match PyModule::import_bound(py, intern!(py, $m)) {
+            Ok(m) => Ok(m.into()),
+            Err(e) => {
+                let v = e.value_bound(py).to_string();
+                Err(ImportError(v))
+            }
+        })
 }}
 
+// ⚠ Accessing these may try to lock Python's GIL.  Make sure it is
+// executed outside a call to `Python::with_gil`.
 lazy_static! {
     // Import matplotlib modules.
-    static ref FIGURE: Result<Py<PyModule>, PyErr> = {
+    static ref FIGURE: Result<Py<PyModule>, ImportError> = {
         pyimport!("matplotlib.figure")
     };
-    static ref PYPLOT: Result<Py<PyModule>, PyErr> = {
+    static ref PYPLOT: Result<Py<PyModule>, ImportError> = {
         pyimport!("matplotlib.pyplot")
     };
-    static ref NUMPY: Result<Numpy, PyErr> = {
+    static ref NUMPY: Result<Numpy, ImportError> = {
         Ok(Numpy {
             numpy: pyimport!("numpy.ctypeslib")?,
             ctypes: pyimport!("ctypes")?,
         })
     };
 }
-
-/// Return a handle to the module `$m`.
-/// ⚠ This may try to lock Python's GIL.  Make sure it is executed
-/// outside a call to `Python::with_gil`.
-macro_rules! pymod { ($m: ident) => {
-    $m.as_ref().map_err(|_| Error::NoMatplotlib)
-}}
 
 
 /// Represent a "connection" to the `numpy` module to be able to
@@ -190,7 +201,7 @@ impl Figure {
     /// ⚠ The figures created with this function will not be displayed
     /// with [`show`].  They can be [saved][Figure::save] to files.
     pub fn new() -> Result<Figure, Error> {
-        let figure = pymod!(FIGURE)?;
+        let figure = FIGURE.as_ref()?;
         Python::with_gil(|py| {
             let fig = getattr!(py, figure, "Figure")
                 .call0(py).unwrap();
@@ -313,7 +324,7 @@ impl Savefig {
 /// This figure is tracked by Matplotlib so [`show()`] displays it.
 /// This implies it must be explicitly deallocated using [`close`].
 pub fn figure() -> Result<Figure, Error> {
-    let pyplot = pymod!(PYPLOT)?;
+    let pyplot = PYPLOT.as_ref()?;
     Python::with_gil(|py| {
         let fig = getattr!(py, pyplot, "figure").call0(py)?;
         Ok(Figure { fig: fig.into() })
@@ -330,7 +341,7 @@ pub fn subplots<const R: usize, const C: usize>(
 
 /// Display all open figures created with [`figure`] or [`subplots`].
 pub fn show() {
-    let pyplot = pymod!(PYPLOT).unwrap();
+    let pyplot = PYPLOT.as_ref().unwrap();
     Python::with_gil(|py| {
         // FIXME: What do we want to do with the errors?
         getattr!(py, pyplot, "show").call0(py).unwrap();
@@ -339,7 +350,7 @@ pub fn show() {
 
 /// Close the figure `fig` (created with [`figure`] or [`subplots`]).
 pub fn close(fig: Figure) {
-    let pyplot = pymod!(PYPLOT).unwrap();
+    let pyplot = PYPLOT.as_ref().unwrap();
     Python::with_gil(|py| {
         getattr!(py, pyplot, "close").call1(py, (fig.fig,)).unwrap();
     })
@@ -347,7 +358,7 @@ pub fn close(fig: Figure) {
 
 /// Close all figures created with [`figure`] or [`subplots`].
 pub fn close_all() {
-    let pyplot = pymod!(PYPLOT).unwrap();
+    let pyplot = PYPLOT.as_ref().unwrap();
     Python::with_gil(|py| {
         getattr!(py, pyplot, "close").call1(py, ("all",)).unwrap();
     })
@@ -475,7 +486,7 @@ impl Axes {
     where D: AsRef<[f64]> {
         // FIXME: Do we want to check that `x` and `y` have the same
         // dimension?  Better error message?
-        let numpy = pymod!(NUMPY).unwrap();
+        let numpy = NUMPY.as_ref().unwrap();
         let x = Pin::new(x.as_ref());
         let y = Pin::new(y.as_ref());
         meth!(self.ax, scatter, py -> {
@@ -729,7 +740,7 @@ where D: AsRef<[f64]> {
 
     /// Plot the data with the options specified in [`XY`].
     pub fn plot(self) -> Line2D {
-        let numpy = pymod!(NUMPY).unwrap();
+        let numpy = NUMPY.as_ref().unwrap();
         Python::with_gil(|py| {
             self.options.plot_data(py, numpy, self.axes, &self.data)
         })
@@ -794,7 +805,7 @@ where I: IntoIterator,
         }
         let x = Pin::new(x.as_slice());
         let y = Pin::new(y.as_slice());
-        let numpy = pymod!(NUMPY).unwrap();
+        let numpy = NUMPY.as_ref().unwrap();
         Python::with_gil(|py| {
             self.options.plot_xy(py, numpy, self.axes, x, y) })
     }
@@ -832,7 +843,7 @@ where F: FnMut(f64) -> Y,
         let y = s.y();
         let x = Pin::new(x.as_slice());
         let y = Pin::new(y.as_slice());
-        let numpy = pymod!(NUMPY).unwrap();
+        let numpy = NUMPY.as_ref().unwrap();
         Python::with_gil(|py| {
             self.options.plot_xy(py, numpy, self.axes, x, y)
         })
