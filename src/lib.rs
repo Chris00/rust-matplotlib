@@ -88,6 +88,12 @@ If you use Anaconda, see https://github.com/PyO3/pyo3/issues/1554"),
 
 impl std::error::Error for Error {}
 
+impl From<PyErr> for Error {
+    fn from(e: PyErr) -> Self {
+        Error::Python(e)
+    }
+}
+
 /// Import and return a handle to the module `$m`.
 macro_rules! pyimport { ($m: literal) => {
     Python::with_gil(|py|
@@ -198,8 +204,7 @@ impl Figure {
     ) -> Result<[[Axes; C]; R], Error> {
         Python::with_gil(|py| {
             let axs = self.fig
-                .call_method1(py, "subplots", (R, C))
-                .map_err(|e| Error::Python(e))?;
+                .call_method1(py, "subplots", (R, C))?;
             let axes;
             if R == 1 {
                 if C == 1 {
@@ -290,14 +295,14 @@ impl Savefig {
                 py, intern!(py, "savefig"),
                 (path.as_ref(),), Some(&kwargs)
             ).map_err(|e| {
-                    if e.is_instance_of::<PyFileNotFoundError>(py) {
-                        Error::FileNotFoundError
-                    } else if e.is_instance_of::<PyPermissionError>(py) {
-                        Error::PermissionError
-                    } else {
-                        Error::Python(e)
-                    }
-                })
+                if e.is_instance_of::<PyFileNotFoundError>(py) {
+                    Error::FileNotFoundError
+                } else if e.is_instance_of::<PyPermissionError>(py) {
+                    Error::PermissionError
+                } else {
+                    Error::Python(e)
+                }
+            })
         })?;
         Ok(())
     }
@@ -310,8 +315,7 @@ impl Savefig {
 pub fn figure() -> Result<Figure, Error> {
     let pyplot = pymod!(PYPLOT)?;
     Python::with_gil(|py| {
-        let fig = getattr!(py, pyplot, "figure")
-            .call0(py).map_err(|e| Error::Python(e))?;
+        let fig = getattr!(py, pyplot, "figure").call0(py)?;
         Ok(Figure { fig: fig.into() })
     })
 }
