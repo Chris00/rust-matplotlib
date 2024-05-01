@@ -45,34 +45,29 @@ jobs:
         python-version: '3.12'
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - name: Install Matplotlib (pip)
-      if: ${{ ! startsWith(matrix.build, 'anaconda') }}
       run: python3 -m pip install -U matplotlib
+      if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - name: Setup Miniconda
+      uses: conda-incubator/setup-miniconda@v3.0.4
       if: startsWith(matrix.build, 'anaconda macos')
-      uses: conda-incubator/setup-miniconda@v3.0.3
     - name: Install Matplotlib (Anaconda)
-      if: startsWith(matrix.build, 'anaconda')
       run: $CONDA/bin/conda install conda-forge::matplotlib
-    - name: Install Rust (rustup)
-      run: |
-        rustup update --no-self-update
-        rustup default ${{ matrix.rust }}
-    - run: cargo build -v
+      if: startsWith(matrix.build, 'anaconda')
+    - name: Install Rust ${{ matrix.rust }}
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ matrix.rust }}
+    - run: cargo build
+      if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - run: cargo test
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - run: cargo run --example a_simple_example
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
-    - name: Run example with Anaconda on Linux
-      if: startsWith(matrix.build, 'anaconda linux')
+    - name: Run example with Anaconda
+      if: startsWith(matrix.build, 'anaconda')
+      shell: bash
       run: |
         eval "$($CONDA/bin/conda shell.bash activate)"
-        export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
+        mkdir -p target/debug/deps
+        ln -s $CONDA_PREFIX/lib/libpython* target/debug/deps
         cargo run --example a_simple_example
-    - name: Run example with Anaconda on MacOS
-      continue-on-error: true
-      if: startsWith(matrix.build, 'anaconda macos')
-      run: |
-        eval "$($CONDA/bin/conda shell.bash activate)"
-        export DYLD_LIBRARY_PATH=$CONDA_PREFIX/lib
-        cargo run --example a_simple_example
-        cargo run --example flower
