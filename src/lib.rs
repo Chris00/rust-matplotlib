@@ -12,7 +12,7 @@
 use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
-    path::Path, pin::Pin, borrow::Cow,
+    path::Path, borrow::Cow,
 };
 use lazy_static::lazy_static;
 use pyo3::{
@@ -25,6 +25,7 @@ use numpy::{
     PyArray1,
     PyArray2,
     PyArrayMethods,
+    ToPyArray,
 };
 
 pub mod colors;
@@ -126,38 +127,8 @@ lazy_static! {
     static ref PYPLOT: Result<Py<PyModule>, ImportError> = {
         pyimport!("matplotlib.pyplot")
     };
-    static ref NUMPY: Result<Numpy, ImportError> = {
-        Ok(Numpy {
-            numpy: pyimport!("numpy.ctypeslib")?,
-            ctypes: pyimport!("ctypes")?,
-        })
-    };
 }
 
-
-/// Represent a "connection" to the `numpy` module to be able to
-/// perform copy-free conversions of data.
-#[derive(Clone)]
-pub struct Numpy {
-    numpy: Py<PyModule>,
-    ctypes: Py<PyModule>,
-}
-
-impl Numpy {
-    /// Convert `vec` to a numpy.ndarray (without copying).
-    /// SAFETY: The result depends on `x` to exist as they share data.
-    fn ndarray(&self, py: Python, x: Pin<&[f64]>) -> PyObject {
-        // ty = ctypes.POINTER(ctypes.c_double)
-        let ty = getattr!(py, self.ctypes, "POINTER")
-            .call1(py, (getattr!(py, self.ctypes, "c_double"),)).unwrap();
-        // ptr = ctypes.cast(x.as_ptr(), ty)
-        let ptr = getattr!(py, self.ctypes, "cast")
-            .call1(py, (x.as_ptr() as usize, ty)).unwrap();
-        // numpy.ctypeslib.as_array(ptr, shape=(x.len(),))
-        getattr!(py, self.numpy, "as_array")
-            .call1(py, (ptr, (x.len(),))).unwrap()
-    }
-}
 
 /// Container for most of the (sub-)plot elements: Axis, Tick,
 /// [`Line2D`], Text, Polygon, etc., and sets the coordinate system.
@@ -486,12 +457,9 @@ impl Axes {
     where D: AsRef<[f64]> {
         // FIXME: Do we want to check that `x` and `y` have the same
         // dimension?  Better error message?
-        let numpy = NUMPY.as_ref().unwrap();
-        let x = Pin::new(x.as_ref());
-        let y = Pin::new(y.as_ref());
         meth!(self.ax, scatter, py -> {
-            let xn = numpy.ndarray(py, x);
-            let yn = numpy.ndarray(py, y);
+            let xn = x.as_ref().to_pyarray_bound(py);
+            let yn = y.as_ref().to_pyarray_bound(py);
             (xn, yn) })
             .unwrap();
         self
@@ -638,11 +606,11 @@ impl<'a> PlotOptions<'a> {
     }
 
     /// Plot the ndarrays `x` and `y` and return the corresponding line.
-    fn plot_xy(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-               x: Pin<&[f64]>, y: Pin<&[f64]>) -> Line2D
-    {
-        let x = numpy.ndarray(py, x);
-        let y = numpy.ndarray(py, y);
+    fn plot_xy(
+        &self, py: Python<'_>, axes: &Axes, x: &[f64], y: &[f64]
+    ) -> Line2D {
+        let x = x.to_pyarray_bound(py);
+        let y = y.to_pyarray_bound(py);
         let lines = axes.ax.call_method_bound(py,
             "plot", (x, y, self.fmt), Some(&self.kwargs(py))).unwrap();
         let lines: &Bound<PyList> = lines.downcast_bound(py).unwrap();
@@ -651,10 +619,9 @@ impl<'a> PlotOptions<'a> {
         Line2D { line2d }
     }
 
-    fn plot_y(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-              y: Pin<&[f64]>) -> Line2D
+    fn plot_y(&self, py: Python<'_>, axes: &Axes, y: &[f64]) -> Line2D
     {
-        let y = numpy.ndarray(py, y);
+        let y = y.to_pyarray_bound(py);
         let lines = axes.ax.call_method_bound(py,
             "plot", (y, self.fmt), Some(&self.kwargs(py))).unwrap();
         let lines: &Bound<PyList> = lines.downcast_bound(py).unwrap();
@@ -662,17 +629,14 @@ impl<'a> PlotOptions<'a> {
         Line2D { line2d }
     }
 
-    fn plot_data<D>(&self, py: Python<'_>, numpy: &Numpy, axes: &Axes,
-                    data: &PlotData<D>) -> Line2D
-    where D: AsRef<[f64]> {
+    fn plot_data<D: AsRef<[f64]>>(
+        &self, py: Python<'_>, axes: &Axes, data: &PlotData<D>
+    ) -> Line2D {
         match data {
             PlotData::XY(x, y) => {
-                let x = Pin::new(x.as_ref());
-                let y = Pin::new(y.as_ref());
-                self.plot_xy(py, numpy, axes, x, y) }
-            PlotData::Y(y) => {
-                let y = Pin::new(y.as_ref());
-                self.plot_y(py, numpy, axes, y) }
+                self.plot_xy(py, axes, x.as_ref(), y.as_ref())
+            }
+            PlotData::Y(y) => self.plot_y(py, axes, y.as_ref()),
         }
     }
 
@@ -740,9 +704,8 @@ where D: AsRef<[f64]> {
 
     /// Plot the data with the options specified in [`XY`].
     pub fn plot(self) -> Line2D {
-        let numpy = NUMPY.as_ref().unwrap();
         Python::with_gil(|py| {
-            self.options.plot_data(py, numpy, self.axes, &self.data)
+            self.options.plot_data(py, self.axes, &self.data)
         })
     }
 }
@@ -803,11 +766,9 @@ where I: IntoIterator,
             x.push(di.x());
             y.push(di.y());
         }
-        let x = Pin::new(x.as_slice());
-        let y = Pin::new(y.as_slice());
-        let numpy = NUMPY.as_ref().unwrap();
         Python::with_gil(|py| {
-            self.options.plot_xy(py, numpy, self.axes, x, y) })
+            self.options.plot_xy(py, self.axes, &x, &y)
+        })
     }
 }
 
@@ -841,11 +802,8 @@ where F: FnMut(f64) -> Y,
         // Ensure `x` and `y` live to the end of the call to "plot".
         let x = s.x();
         let y = s.y();
-        let x = Pin::new(x.as_slice());
-        let y = Pin::new(y.as_slice());
-        let numpy = NUMPY.as_ref().unwrap();
         Python::with_gil(|py| {
-            self.options.plot_xy(py, numpy, self.axes, x, y)
+            self.options.plot_xy(py, self.axes, &x, &y)
         })
     }
 
