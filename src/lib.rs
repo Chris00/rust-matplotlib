@@ -106,26 +106,30 @@ impl From<&ImportError> for Error {
 }
 
 /// Import and return a handle to the module `$m`.
-macro_rules! pyimport { ($m: literal) => {
+macro_rules! pyimport { ($name: path, $m: literal) => {
     Python::with_gil(|py|
         match PyModule::import_bound(py, intern!(py, $m)) {
             Ok(m) => Ok(m.into()),
             Err(e) => {
-                let v = e.value_bound(py).to_string();
-                Err(ImportError(v))
+                let mut msg = stringify!($name).to_string();
+                msg.push_str(": ");
+                if let Ok(s) = e.value_bound(py).str() {
+                    let s = s.to_str().unwrap_or("Import error");
+                    msg.push_str(s)
+                }
+                Err(ImportError(msg))
             }
         })
 }}
 
-// ⚠ Accessing these may try to lock Python's GIL.  Make sure it is
-// executed outside a call to `Python::with_gil`.
 lazy_static! {
-    // Import matplotlib modules.
+    /// ⚠ Accessing these may try to lock Python's GIL.  Make sure it is
+    /// executed outside a call to `Python::with_gil`.
     static ref FIGURE: Result<Py<PyModule>, ImportError> = {
-        pyimport!("matplotlib.figure")
+        pyimport!(matplotlib::FIGURE, "matplotlib.figure")
     };
     static ref PYPLOT: Result<Py<PyModule>, ImportError> = {
-        pyimport!("matplotlib.pyplot")
+        pyimport!(matplotlib::PYPLOT, "matplotlib.pyplot")
     };
 }
 
