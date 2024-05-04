@@ -439,7 +439,7 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib as plt;
+    /// use matplotlib::{self as plt, colors::Tab};
     /// use ndarray::{Array1, Array2};
     /// let x: Array1<f64> = Array1::linspace(-1., 1., 30);
     /// let y: Array1<f64> = Array1::linspace(-1., 1., 30);
@@ -452,6 +452,7 @@ impl Axes {
     /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.contour(x.as_slice().unwrap(), y.as_slice().unwrap(), &z)
     ///     .levels(&[0.2, 0.5, 0.8])
+    ///     .colors(&[Tab::Red, Tab::Blue, Tab::Olive])
     ///     .plot();
     /// fig.save().to_file("target/contour.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
@@ -465,6 +466,7 @@ impl Axes {
             options: PlotOptions::new(),
             x, y, z,
             levels: None,
+            colors: None,
         }
     }
 
@@ -496,6 +498,7 @@ impl Axes {
             n1: 100,
             n2: 100,
             levels: None,
+            colors: None,
         }
     }
 
@@ -883,6 +886,45 @@ macro_rules! set_contour_options { () => {
         self.levels = Some(levels);
         self
     }
+
+    pub fn colors<C: Color>(mut self, colors: impl AsRef<[C]>) -> Self {
+		let colors = colors.as_ref();
+        let mut rgbas = Vec::with_capacity(colors.len());
+		for c in colors {
+			rgbas.push(c.rgba());
+		}
+        self.colors = Some(rgbas);
+        self
+    }
+
+    fn update_dict(&self, d: &mut Bound<PyDict>) {
+        let py = d.py();
+        if let Some(levels) = self.levels {
+            let n = levels.len();
+            let levels = levels.to_pyarray_bound(py);
+            d.set_item("levels", levels).unwrap();
+
+            if let Some(colors) = &self.colors {
+                if colors.len() >= n {
+                    let colors = PyList::new_bound(py, colors);
+                    d.set_item("colors", colors).unwrap();
+                } else {
+                    let default = self.options.color.unwrap_or([0.,0.,0.,1.]);
+                    let mut colors = colors.clone();
+                    for _ in 0 .. n - colors.len() {
+                        colors.push(default);
+                    }
+                    let colors = PyList::new_bound(py, colors);
+                    d.set_item("colors", colors).unwrap();
+                }
+            } else if let Some(color) = self.options.color {
+                // let colors = std::iter::repeat_n(color, n);
+                let colors = vec![color; n];
+                let colors = PyList::new_bound(py, colors);
+                d.set_item("colors", colors).unwrap();
+            }
+        }
+    }
 }}
 
 #[must_use]
@@ -893,6 +935,7 @@ pub struct Contour<'a, D> {
     y: D,
     z: &'a ndarray::Array2<f64>,
     levels: Option<&'a [f64]>,
+    colors: Option<Vec<[f64; 4]>>,
 }
 
 impl<'a, D> Contour<'a, D>
@@ -905,11 +948,8 @@ where D: AsRef<[f64]> {
             let x = self.x.as_ref().to_pyarray_bound(py);
             let y = self.y.as_ref().to_pyarray_bound(py);
             let z = self.z.to_pyarray_bound(py);
-            let opt = self.options.kwargs(py);
-            if let Some(levels) = self.levels {
-                let levels = levels.to_pyarray_bound(py);
-                opt.set_item("levels", levels).unwrap();
-            }
+            let mut opt = self.options.kwargs(py);
+            self.update_dict(&mut opt);
             let contours = self.axes.ax
                 .call_method_bound(py, intern!(py, "contour"),
                     (x, y, z),
@@ -931,6 +971,7 @@ pub struct ContourFun<'a, F> {
     n1: usize, // FIXME: want to be more versatile than an equispaced grid?
     n2: usize,
     levels: Option<&'a [f64]>,
+    colors: Option<Vec<[f64; 4]>>,
 }
 
 impl<'a, F> ContourFun<'a, F>
@@ -961,11 +1002,8 @@ where F: FnMut(f64, f64) -> f64 {
             let x = x.to_pyarray_bound(py);
             let y = y.to_pyarray_bound(py);
             let z = z.to_pyarray_bound(py);
-            let opt = self.options.kwargs(py);
-            if let Some(levels) = self.levels {
-                let levels = levels.to_pyarray_bound(py);
-                opt.set_item("levels", levels).unwrap();
-            }
+            let mut opt = self.options.kwargs(py);
+            self.update_dict(&mut opt);
             let contours = self.axes.ax
                 .call_method_bound(py, intern!(py, "contour"),
                     (x, y, z),
