@@ -450,7 +450,9 @@ impl Axes {
     ///     }
     /// }
     /// let (fig, [[mut ax]]) = plt::subplots()?;
-    /// ax.contour(x.as_slice().unwrap(), y.as_slice().unwrap(), &z).plot();
+    /// ax.contour(x.as_slice().unwrap(), y.as_slice().unwrap(), &z)
+    ///     .levels(&[0.2, 0.5, 0.8])
+    ///     .plot();
     /// fig.save().to_file("target/contour.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
@@ -876,6 +878,13 @@ impl QuadContourSet {
     }
 }
 
+macro_rules! set_contour_options { () => {
+    pub fn levels(mut self, levels: &'a [f64]) -> Self {
+        self.levels = Some(levels);
+        self
+    }
+}}
+
 #[must_use]
 pub struct Contour<'a, D> {
     axes: &'a Axes,
@@ -889,6 +898,7 @@ pub struct Contour<'a, D> {
 impl<'a, D> Contour<'a, D>
 where D: AsRef<[f64]> {
     set_plotoptions!();
+    set_contour_options!();
 
     pub fn plot(&self) -> QuadContourSet {
         Python::with_gil(|py| {
@@ -926,6 +936,7 @@ pub struct ContourFun<'a, F> {
 impl<'a, F> ContourFun<'a, F>
 where F: FnMut(f64, f64) -> f64 {
     set_plotoptions!();
+    set_contour_options!();
 
     pub fn plot(&mut self) -> QuadContourSet {
         let mut x = Vec::with_capacity(self.n1);
