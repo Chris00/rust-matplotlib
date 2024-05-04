@@ -66,7 +66,7 @@ impl Color for f64 {
 /// Remark: The colors green, cyan, magenta, and yellow do not
 /// coincide with X11/CSS4 colors.  Their particular shades were chosen
 /// for better visibility of colored lines against typical backgrounds.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Base {
     /// Blue
     B,
@@ -102,7 +102,7 @@ impl Color for Base {
 }
 
 /// The [Tableau Palette](https://matplotlib.org/stable/gallery/color/named_colors.html#tableau-palette).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Tab {
     Blue,
     Orange,
@@ -134,7 +134,7 @@ impl Color for Tab {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum CSS4 {
     AcidGreen,
     Adobe,
@@ -2049,7 +2049,7 @@ impl Color for CSS4 {
 /// It is a collection of the 954 most common RGB monitor colors, as
 /// defined by several hundred thousand participants in the xkcd color
 /// name survey.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Xkcd {
     AcidGreen,
     Adobe,
