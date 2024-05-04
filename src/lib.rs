@@ -433,18 +433,58 @@ impl Axes {
     }
 
 
-    pub fn contour<'a>(&'a mut self, ) -> Contour<'a> {
+    /// Draw the contour lines for the data `z[j,i]` as points
+    /// (`x[i]`, `y[j]`).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib as plt;
+    /// use ndarray::{Array1, Array2};
+    /// let x: Array1<f64> = Array1::linspace(-1., 1., 30);
+    /// let y: Array1<f64> = Array1::linspace(-1., 1., 30);
+    /// let mut z = Array2::zeros((30, 30));
+    /// for (j, &y) in y.iter().enumerate() {
+    ///     for (i, &x) in x.iter().enumerate() {
+    ///         z[(j, i)] = (0.5 * x).powi(2) + y.powi(2);
+    ///     }
+    /// }
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
+    /// ax.contour(x.as_slice().unwrap(), y.as_slice().unwrap(), &z).plot();
+    /// fig.save().to_file("target/contour.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    pub fn contour<'a, D>(
+        &'a mut self, x: D, y: D, z: &'a ndarray::Array2<f64>,
+    ) -> Contour<'a, D>
+    where D: AsRef<[f64]> {
         Contour {
             axes: self,
             options: PlotOptions::new(),
+            x, y, z,
+            levels: None,
         }
     }
 
+    /// Draw the contour lines for function `f` in the rectangle `ab`×`cd`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
+    /// ax.contour_fun([-1., 1.], [-1., 1.], |x, y| {
+    ///     (0.5 * x).powi(2) + y.powi(2)
+    /// })
+    ///     .plot();
+    /// fig.save().to_file("target/contour_fun.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
     pub fn contour_fun<'a, F>(
         &'a mut self,
-        f: F,
         ab: [f64; 2],
         cd: [f64; 2],
+        f: F,
     ) -> ContourFun<'a, F>
     where F: FnMut(f64, f64) -> f64 {
         ContourFun {
@@ -453,6 +493,7 @@ impl Axes {
             f, ab, cd,
             n1: 100,
             n2: 100,
+            levels: None,
         }
     }
 
@@ -822,16 +863,51 @@ where F: FnMut(f64) -> Y,
     }
 }
 
-
-#[must_use]
-pub struct Contour<'a> {
-    axes: &'a Axes,
-    options: PlotOptions<'a>,
+pub struct QuadContourSet {
+    contours: PyObject,
 }
 
-impl<'a> Contour<'a> {
+impl QuadContourSet {
+    pub fn set_color(&mut self, c: impl Color) -> &mut Self {
+        Python::with_gil(|py| {
+            meth!(self.contours, set_color, (colors::py(py, c),)).unwrap()
+        });
+        self
+    }
+}
+
+#[must_use]
+pub struct Contour<'a, D> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    x: D,
+    y: D,
+    z: &'a ndarray::Array2<f64>,
+    levels: Option<&'a [f64]>,
+}
+
+impl<'a, D> Contour<'a, D>
+where D: AsRef<[f64]> {
     set_plotoptions!();
 
+    pub fn plot(&self) -> QuadContourSet {
+        Python::with_gil(|py| {
+            let x = self.x.as_ref().to_pyarray_bound(py);
+            let y = self.y.as_ref().to_pyarray_bound(py);
+            let z = self.z.to_pyarray_bound(py);
+            let opt = self.options.kwargs(py);
+            if let Some(levels) = self.levels {
+                let levels = levels.to_pyarray_bound(py);
+                opt.set_item("levels", levels).unwrap();
+            }
+            let contours = self.axes.ax
+                .call_method_bound(py, intern!(py, "contour"),
+                    (x, y, z),
+                    Some(&opt))
+                .unwrap();
+            QuadContourSet { contours }
+        })
+    }
 }
 
 
@@ -842,14 +918,51 @@ pub struct ContourFun<'a, F> {
     f: F,
     ab: [f64; 2],
     cd: [f64; 2],
-    n1: usize,
+    n1: usize, // FIXME: want to be more versatile than an equispaced grid?
     n2: usize,
+    levels: Option<&'a [f64]>,
 }
 
 impl<'a, F> ContourFun<'a, F>
 where F: FnMut(f64, f64) -> f64 {
     set_plotoptions!();
 
+    pub fn plot(&mut self) -> QuadContourSet {
+        let mut x = Vec::with_capacity(self.n1);
+        let mut y = Vec::with_capacity(self.n2);
+        let mut z = ndarray::Array2::zeros((self.n2, self.n1));
+        let a = self.ab[0];
+        let dx = (self.ab[1] - a) / (self.n1 - 1) as f64;
+        for i in 0 .. self.n1 {
+            x.push(a + dx * i as f64);
+        }
+        let c = self.cd[0];
+        let dy = (self.cd[1] - c) / (self.n2 - 1) as f64;
+        for j in 0 .. self.n2 {
+            y.push(c + dy * j as f64);
+        }
+        for (j, &y) in y.iter().enumerate() {
+            for (i, &x) in x.iter().enumerate() {
+                z[(j, i)] = (self.f)(x, y);
+            }
+        }
+        Python::with_gil(|py| {
+            let x = x.to_pyarray_bound(py);
+            let y = y.to_pyarray_bound(py);
+            let z = z.to_pyarray_bound(py);
+            let opt = self.options.kwargs(py);
+            if let Some(levels) = self.levels {
+                let levels = levels.to_pyarray_bound(py);
+                opt.set_item("levels", levels).unwrap();
+            }
+            let contours = self.axes.ax
+                .call_method_bound(py, intern!(py, "contour"),
+                    (x, y, z),
+                    Some(&opt))
+                .unwrap();
+            QuadContourSet { contours }
+        })
+    }
 }
 
 
@@ -871,8 +984,7 @@ impl Line2D {
     /// Set the color of the line to `c`.
     pub fn set_color(&mut self, c: impl Color) -> &mut Self {
         Python::with_gil(|py| {
-            let c = PyTuple::new_bound(py, c.rgba());
-            meth!(self.line2d, set_color, (c,)).unwrap();
+            meth!(self.line2d, set_color, (colors::py(py, c),)).unwrap();
             self
         })
     }

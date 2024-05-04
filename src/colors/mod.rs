@@ -8,11 +8,19 @@
 
 // https://matplotlib.org/stable/users/explain/colors/colors.html
 
+use pyo3::{prelude::*, types::PyTuple};
+
 /// Trait that color representations must satisfy.
 pub trait Color {
     /// Return the RGBA components of the color as numbers in
     /// \[0., 1.\].
     fn rgba(&self) -> [f64; 4];
+}
+
+/// Return the Python tuple corresponding to a color.
+#[inline]
+pub(crate) fn py(py: Python<'_>, c: impl Color) -> Bound<PyTuple> {
+    PyTuple::new_bound(py, c.rgba())
 }
 
 impl Color for [f64; 3] {
