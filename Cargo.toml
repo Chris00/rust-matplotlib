@@ -12,13 +12,13 @@ keywords = ["plot", "graph", "curve", "surface"]
 categories = ["science", "visualization", "mathematics", "graphics"]
 
 [dependencies]
-numpy = "0.21"
-ndarray = "0.15.6"
+numpy = "0.22.1"
+ndarray = "0.16.1"
 curve-sampling = { version = "0.5", optional = true, git = "https://github.com/Chris00/rust-curve-sampling.git" }
 lazy_static = "1.4.0"
 
 [dependencies.pyo3]
-version = "0.21.2"
+version = "0.22.5"
 features = ["auto-initialize"]
 
 [features]
@@ -26,4 +26,4 @@ default = ["curve-sampling"]
 
 [dev-dependencies]
 doc-comment = "0.3.3"
-polars-core = { version = "0.38.1", features = ["fmt"] }
+polars-core = { version = "0.44.2", features = ["fmt"] }

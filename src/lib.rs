@@ -136,7 +136,7 @@ lazy_static! {
 
 /// Container for most of the (sub-)plot elements: Axis, Tick,
 /// [`Line2D`], Text, Polygon, etc., and sets the coordinate system.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Axes {
     ax: PyObject,
 }
@@ -190,14 +190,15 @@ impl Figure {
     ) -> Result<[[Axes; C]; R], Error> {
         Python::with_gil(|py| {
             let axs = self.fig
-                .call_method1(py, "subplots", (R, C))?;
+                .bind(py)
+                .call_method1("subplots", (R, C))?;
             let axes;
             if R == 1 {
                 if C == 1 {
-                    axes = grid(|_,_| Axes { ax: axs.clone() });
+                    axes = grid(|_,_| Axes { ax: axs.clone().unbind() });
                 } else { // C > 1
                     let axg: &Bound<PyArray1<PyObject>> =
-                        axs.downcast_bound(py).unwrap();
+                        axs.downcast().unwrap();
                     axes = grid(|_,c| {
                         let ax = axg.get_owned(c).unwrap();
                         Axes { ax } });
@@ -205,13 +206,13 @@ impl Figure {
             } else { // R > 1
                 if C == 1 {
                     let axg: &Bound<PyArray1<PyObject>> =
-                        axs.downcast_bound(py).unwrap();
+                        axs.downcast().unwrap();
                     axes = grid(|r,_| {
                         let ax = axg.get_owned(r).unwrap();
                         Axes { ax } });
                 } else { // C > 1
                     let axg: &Bound<PyArray2<PyObject>> =
-                        axs.downcast_bound(py).unwrap();
+                        axs.downcast().unwrap();
                     axes = grid(|r, c| {
                         let ax = axg.get_owned([r, c]).unwrap();
                         Axes { ax } });
@@ -238,8 +239,8 @@ impl Figure {
     }
 
     /// Save the figure to a file.
-    pub fn save(&self) -> Savefig {
-        Savefig { fig: self.fig.clone(), dpi: None }
+    pub fn save(&self) -> Savefig<'_> {
+        Savefig { fig: &self.fig, dpi: None }
     }
 
     /// Default width: 6.4, default height: 4.8
@@ -256,12 +257,12 @@ impl Figure {
 
 /// Options for saving figures.
 #[must_use]
-pub struct Savefig {
-    fig: PyObject,
+pub struct Savefig<'a> {
+    fig: &'a PyObject,
     dpi: Option<f64>,
 }
 
-impl Savefig {
+impl<'a> Savefig<'a> {
     pub fn dpi(&mut self, dpi: f64) -> &mut Self {
         if dpi > 0. {
             self.dpi = Some(dpi);
@@ -632,7 +633,7 @@ impl<'a> PlotOptions<'a> {
         }
     }
 
-    fn kwargs(&'a self, py: Python<'a>) -> Bound<PyDict> {
+    fn kwargs(&'a self, py: Python<'a>) -> Bound<'a, PyDict> {
         let kwargs = PyDict::new_bound(py);
         if self.animated {
             kwargs.set_item("animated", true).unwrap()
