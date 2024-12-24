@@ -19,8 +19,8 @@ pub trait Color {
 
 /// Return the Python tuple corresponding to a color.
 #[inline]
-pub(crate) fn py(py: Python<'_>, c: impl Color) -> Bound<PyTuple> {
-    PyTuple::new_bound(py, c.rgba())
+pub(crate) fn py(py: Python<'_>, c: impl Color) -> Bound<'_, PyTuple> {
+    PyTuple::new(py, c.rgba()).unwrap()
 }
 
 impl Color for [f64; 3] {

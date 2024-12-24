@@ -108,12 +108,12 @@ impl From<&ImportError> for Error {
 /// Import and return a handle to the module `$m`.
 macro_rules! pyimport { ($name: path, $m: literal) => {
     Python::with_gil(|py|
-        match PyModule::import_bound(py, intern!(py, $m)) {
+        match PyModule::import(py, intern!(py, $m)) {
             Ok(m) => Ok(m.into()),
             Err(e) => {
                 let mut msg = stringify!($name).to_string();
                 msg.push_str(": ");
-                if let Ok(s) = e.value_bound(py).str() {
+                if let Ok(s) = e.value(py).str() {
                     let s = s.to_str().unwrap_or("Import error");
                     msg.push_str(s)
                 }
@@ -132,6 +132,13 @@ lazy_static! {
         pyimport!(matplotlib::PYPLOT, "matplotlib.pyplot")
     };
 }
+
+// RuntimeWarning: More than 20 figures have been opened. Figures
+// created through the pyplot interface (`matplotlib.pyplot.figure`)
+// are retained until explicitly closed and may consume too much
+// memory. […]  Consider using `matplotlib.pyplot.close()`.
+//
+// => Do not use pyplot interface (since we need handles anyway).
 
 
 /// Container for most of the (sub-)plot elements: Axis, Tick,
@@ -246,9 +253,9 @@ impl Figure {
     /// Default width: 6.4, default height: 4.8
     pub fn set_size_inches(&mut self, width: f64, height: f64) -> &mut Self {
         Python::with_gil(|py| {
-            let kwargs = PyDict::new_bound(py);
+            let kwargs = PyDict::new(py);
             kwargs.set_item("size_inches", (width, height)).unwrap();
-            self.fig.call_method_bound(py, intern!(py, "set"), (),
+            self.fig.call_method(py, intern!(py, "set"), (),
                 Some(&kwargs)).unwrap();
         });
         self
@@ -274,11 +281,11 @@ impl<'a> Savefig<'a> {
 
     pub fn to_file(&self, path: impl AsRef<Path>) -> Result<(), Error> {
         Python::with_gil(|py| {
-            let kwargs = PyDict::new_bound(py);
+            let kwargs = PyDict::new(py);
             if let Some(dpi) = self.dpi {
                 kwargs.set_item("dpi", dpi).unwrap()
             }
-            self.fig.call_method_bound(
+            self.fig.call_method(
                 py, intern!(py, "savefig"),
                 (path.as_ref(),), Some(&kwargs)
             ).map_err(|e| {
@@ -509,8 +516,8 @@ impl Axes {
         // FIXME: Do we want to check that `x` and `y` have the same
         // dimension?  Better error message?
         meth!(self.ax, scatter, py -> {
-            let xn = x.as_ref().to_pyarray_bound(py);
-            let yn = y.as_ref().to_pyarray_bound(py);
+            let xn = x.as_ref().to_pyarray(py);
+            let yn = y.as_ref().to_pyarray(py);
             (xn, yn) })
             .unwrap();
         self
@@ -588,13 +595,13 @@ impl Axes {
         Python::with_gil(|py| {
             let elements = lines.into_iter().map(|l| l.line2d);
             if elements.len() == 0 { // FIXME: .is_empty is unstable
-                self.ax.call_method_bound(py, intern!(py, "legend"), (), None)
+                self.ax.call_method(py, intern!(py, "legend"), (), None)
                     .unwrap();
             } else {
-                let dic = PyDict::new_bound(py);
-                dic.set_item("handles", PyList::new_bound(py, elements))
+                let dic = PyDict::new(py);
+                dic.set_item("handles", PyList::new(py, elements).unwrap())
                     .unwrap();
-                self.ax.call_method_bound(py, intern!(py, "legend"), (),
+                self.ax.call_method(py, intern!(py, "legend"), (),
                     Some(&dic))
                     .unwrap();
             }
@@ -634,7 +641,7 @@ impl<'a> PlotOptions<'a> {
     }
 
     fn kwargs(&'a self, py: Python<'a>) -> Bound<'a, PyDict> {
-        let kwargs = PyDict::new_bound(py);
+        let kwargs = PyDict::new(py);
         if self.animated {
             kwargs.set_item("animated", true).unwrap()
         }
@@ -650,7 +657,7 @@ impl<'a> PlotOptions<'a> {
             kwargs.set_item("markersize", w).unwrap()
         }
         if let Some(rgba) = self.color {
-            let color = PyTuple::new_bound(py, rgba);
+            let color = PyTuple::new(py, rgba).unwrap();
             kwargs.set_item("color", color).unwrap()
         }
         kwargs
@@ -660,9 +667,9 @@ impl<'a> PlotOptions<'a> {
     fn plot_xy(
         &self, py: Python<'_>, axes: &Axes, x: &[f64], y: &[f64]
     ) -> Line2D {
-        let x = x.to_pyarray_bound(py);
-        let y = y.to_pyarray_bound(py);
-        let lines = axes.ax.call_method_bound(py,
+        let x = x.to_pyarray(py);
+        let y = y.to_pyarray(py);
+        let lines = axes.ax.call_method(py,
             "plot", (x, y, self.fmt), Some(&self.kwargs(py))).unwrap();
         let lines: &Bound<PyList> = lines.downcast_bound(py).unwrap();
         // Extract the element from the list of length 1 (1 data plotted)
@@ -672,8 +679,8 @@ impl<'a> PlotOptions<'a> {
 
     fn plot_y(&self, py: Python<'_>, axes: &Axes, y: &[f64]) -> Line2D
     {
-        let y = y.to_pyarray_bound(py);
-        let lines = axes.ax.call_method_bound(py,
+        let y = y.to_pyarray(py);
+        let lines = axes.ax.call_method(py,
             "plot", (y, self.fmt), Some(&self.kwargs(py))).unwrap();
         let lines: &Bound<PyList> = lines.downcast_bound(py).unwrap();
         let line2d = lines.get_item(0).unwrap().into();
@@ -902,12 +909,12 @@ macro_rules! set_contour_options { () => {
         let py = d.py();
         if let Some(levels) = self.levels {
             let n = levels.len();
-            let levels = levels.to_pyarray_bound(py);
+            let levels = levels.to_pyarray(py);
             d.set_item("levels", levels).unwrap();
 
             if let Some(colors) = &self.colors {
                 if colors.len() >= n {
-                    let colors = PyList::new_bound(py, colors);
+                    let colors = PyList::new(py, colors).unwrap();
                     d.set_item("colors", colors).unwrap();
                 } else {
                     let default = self.options.color.unwrap_or([0.,0.,0.,1.]);
@@ -915,13 +922,13 @@ macro_rules! set_contour_options { () => {
                     for _ in 0 .. n - colors.len() {
                         colors.push(default);
                     }
-                    let colors = PyList::new_bound(py, colors);
+                    let colors = PyList::new(py, colors).unwrap();
                     d.set_item("colors", colors).unwrap();
                 }
             } else if let Some(color) = self.options.color {
                 // let colors = std::iter::repeat_n(color, n);
                 let colors = vec![color; n];
-                let colors = PyList::new_bound(py, colors);
+                let colors = PyList::new(py, colors).unwrap();
                 d.set_item("colors", colors).unwrap();
             }
         }
@@ -946,13 +953,13 @@ where D: AsRef<[f64]> {
 
     pub fn plot(&self) -> QuadContourSet {
         Python::with_gil(|py| {
-            let x = self.x.as_ref().to_pyarray_bound(py);
-            let y = self.y.as_ref().to_pyarray_bound(py);
-            let z = self.z.to_pyarray_bound(py);
+            let x = self.x.as_ref().to_pyarray(py);
+            let y = self.y.as_ref().to_pyarray(py);
+            let z = self.z.to_pyarray(py);
             let mut opt = self.options.kwargs(py);
             self.update_dict(&mut opt);
             let contours = self.axes.ax
-                .call_method_bound(py, intern!(py, "contour"),
+                .call_method(py, intern!(py, "contour"),
                     (x, y, z),
                     Some(&opt))
                 .unwrap();
@@ -1000,13 +1007,13 @@ where F: FnMut(f64, f64) -> f64 {
             }
         }
         Python::with_gil(|py| {
-            let x = x.to_pyarray_bound(py);
-            let y = y.to_pyarray_bound(py);
-            let z = z.to_pyarray_bound(py);
+            let x = x.to_pyarray(py);
+            let y = y.to_pyarray(py);
+            let z = z.to_pyarray(py);
             let mut opt = self.options.kwargs(py);
             self.update_dict(&mut opt);
             let contours = self.axes.ax
-                .call_method_bound(py, intern!(py, "contour"),
+                .call_method(py, intern!(py, "contour"),
                     (x, y, z),
                     Some(&opt))
                 .unwrap();
@@ -1017,18 +1024,22 @@ where F: FnMut(f64, f64) -> f64 {
 
 
 impl Line2D {
-    fn set_kw(&self, prop: &str, v: impl ToPyObject) {
-        Python::with_gil(|py| {
-            let kwargs = PyDict::new_bound(py);
-            kwargs.set_item(prop, v).unwrap();
-            self.line2d.call_method_bound(py, "set", (), Some(&kwargs))
-                .unwrap();
-        })
+    fn set_kw<'a>(
+        &self,
+        py: Python<'a>,
+        prop: &str,
+        v: impl IntoPyObject<'a>
+    ) {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(prop, v).unwrap();
+        self.line2d.call_method(py, "set", (), Some(&kwargs)).unwrap();
     }
 
     pub fn set_label(&mut self, label: impl AsRef<str>) -> &mut Self {
-        self.set_kw("label", label.as_ref());
-        self
+        Python::with_gil(|py| {
+            self.set_kw(py, "label", label.as_ref());
+            self
+        })
     }
 
     /// Set the color of the line to `c`.
@@ -1040,13 +1051,17 @@ impl Line2D {
     }
 
     pub fn set_linewidth(&mut self, w: f64) -> &mut Self {
-        self.set_kw("linewidth", w);
-        self
+        Python::with_gil(|py| {
+            self.set_kw(py, "linewidth", w);
+            self
+        })
     }
 
     pub fn linewidth(self, w: f64) -> Self {
-        self.set_kw("linewidth", w);
-        self
+        Python::with_gil(|py| {
+            self.set_kw(py, "linewidth", w);
+            self
+        })
     }
 }
 
