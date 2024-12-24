@@ -10,11 +10,12 @@
 //! [Matplotlib]: https://matplotlib.org/
 
 use std::{
+    borrow::Cow,
     fmt::{Display, Formatter},
     marker::PhantomData,
-    path::Path, borrow::Cow,
+    path::Path,
+    sync::LazyLock,
 };
-use lazy_static::lazy_static;
 use pyo3::{
     prelude::*,
     intern,
@@ -122,16 +123,16 @@ macro_rules! pyimport { ($name: path, $m: literal) => {
         })
 }}
 
-lazy_static! {
-    /// ⚠ Accessing these may try to lock Python's GIL.  Make sure it is
-    /// executed outside a call to `Python::with_gil`.
-    static ref FIGURE: Result<Py<PyModule>, ImportError> = {
+/// ⚠ Accessing these may try to lock Python's GIL.  Make sure it is
+/// executed outside a call to `Python::with_gil`.
+static FIGURE: LazyLock<Result<Py<PyModule>, ImportError>> =
+    LazyLock::new(|| {
         pyimport!(matplotlib::FIGURE, "matplotlib.figure")
-    };
-    static ref PYPLOT: Result<Py<PyModule>, ImportError> = {
+    });
+static PYPLOT: LazyLock<Result<Py<PyModule>, ImportError>> =
+    LazyLock::new(|| {
         pyimport!(matplotlib::PYPLOT, "matplotlib.pyplot")
-    };
-}
+    });
 
 // RuntimeWarning: More than 20 figures have been opened. Figures
 // created through the pyplot interface (`matplotlib.pyplot.figure`)
