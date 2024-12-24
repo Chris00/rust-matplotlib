@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [stable, beta, nightly, anaconda linux, macos, anaconda macos, macos-aarch64, anaconda macos-aarch64, win64]
+        build: [stable, beta, nightly, anaconda linux, macos, anaconda macos, win64]
         include:
           - build: stable
             os: ubuntu-latest
@@ -28,13 +28,6 @@ jobs:
           - build: anaconda macos
             os: macos-latest
             rust: nightly
-          - build: macos-aarch64
-            # Must install app https://github.com/apps/flyci-prod
-            os: flyci-macos-large-latest-m1
-            rust: stable
-          - build: anaconda macos-aarch64
-            os: flyci-macos-large-latest-m1
-            rust: stable
           - build: win64
             os: windows-latest
             rust: stable
