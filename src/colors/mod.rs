@@ -1,6 +1,17 @@
 //! Matplotlib colors.
 //!
-//! https://matplotlib.org/stable/gallery/color/named_colors.html
+//! This module defines a [`Color`] trait and implements it for `[r,
+//! g, b]`, `[r, g, b, a]` (where `r`, `g`, `b`, `a` are `f64` numbers
+//! clamped to the interval \[0,1\], or `u8` numbers) and `f64`
+//! (clamped to \[0,1\], for gray-scale).  If you would like to use
+//! HTML colors, statically checked, you can for example use the crate
+//! [color-hex][].  For any color `c`, `(c, a)` is another color that
+//! sets (or overrides) the alpha component to `a`.  Moreover, it also
+//! defines all [matplotlib color tables][colors], [`Base`], [`Tab`],
+//! [`CSS4`], and [`Xkcd`].
+//!
+//! [colors]: https://matplotlib.org/stable/gallery/color/named_colors.html
+//! [color-hex]: https://crates.io/crates/color-hex
 
 // Unlike Matplotlib colors, we want the colors to be statically
 // checked as much as possible to avoid a plot to stop the whole
@@ -34,6 +45,20 @@ impl Color for [f64; 4] {
     fn rgba(&self) -> [f64; 4] {
         [self[0].clamp(0., 1.), self[1].clamp(0., 1.),
             self[2].clamp(0., 1.), self[3].clamp(0., 1.)]
+    }
+}
+
+impl Color for [u8; 3] {
+    fn rgba(&self) -> [f64; 4] {
+        [self[0] as f64 / 255., self[1] as f64 / 255.,
+            self[2] as f64 / 255., 1.]
+    }
+}
+
+impl Color for [u8; 4] {
+    fn rgba(&self) -> [f64; 4] {
+        [self[0] as f64 / 255., self[1] as f64 / 255.,
+            self[2] as f64 / 255., self[3] as f64 / 255.]
     }
 }
 
@@ -134,6 +159,7 @@ impl Color for Tab {
     }
 }
 
+/// The [CSS4 colors](https://matplotlib.org/stable/gallery/color/named_colors.html#css-colors).
 #[derive(Clone, Copy, Debug)]
 pub enum CSS4 {
     AcidGreen,
