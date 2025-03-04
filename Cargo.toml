@@ -16,6 +16,7 @@ rust-version = "1.80"
 numpy = "0.23.0"
 ndarray = "0.16.1"
 curve-sampling = { version = "0.5", optional = true, git = "https://github.com/Chris00/rust-curve-sampling.git" }
+num-complex = { version = "0.4.6", optional = true }
 
 [dependencies.pyo3]
 version = "0.23.3"

@@ -810,6 +810,14 @@ impl CoordXY for [f64; 2] {
     fn y(&self) -> f64 { self[1] }
 }
 
+#[cfg(feature = "num-complex")]
+impl CoordXY for num_complex::Complex64 {
+    #[inline]
+    fn x(&self) -> f64 { self.re }
+    #[inline]
+    fn y(&self) -> f64 { self.im }
+}
+
 impl<'a, I> XYFrom<'a, I>
 where I: IntoIterator,
       <I as IntoIterator>::Item: CoordXY {
