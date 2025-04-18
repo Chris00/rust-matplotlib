@@ -188,7 +188,7 @@ impl Figure {
         Python::with_gil(|py| {
             let fig = getattr!(py, figure, "Figure")
                 .call0(py).unwrap();
-            Ok(Self { fig: fig.into() })
+            Ok(Self { fig })
         })
     }
 
@@ -311,7 +311,7 @@ pub fn figure() -> Result<Figure, Error> {
     let pyplot = PYPLOT.as_ref()?;
     Python::with_gil(|py| {
         let fig = getattr!(py, pyplot, "figure").call0(py)?;
-        Ok(Figure { fig: fig.into() })
+        Ok(Figure { fig })
     })
 }
 
@@ -703,19 +703,16 @@ impl<'a> PlotOptions<'a> {
 
 /// Declare methods to set the options assuming `self.options` exists.
 macro_rules! set_plotoptions { () => {
-    #[must_use]
     pub fn fmt(mut self, fmt: &'a str) -> Self {
         self.options.fmt = fmt;
         self
     }
 
-    #[must_use]
     pub fn animated(mut self) -> Self {
         self.options.animated = true;
         self
     }
 
-    #[must_use]
     pub fn antialiased(mut self, b: bool) -> Self {
         self.options.antialiased = b;
         self
@@ -723,26 +720,22 @@ macro_rules! set_plotoptions { () => {
 
     /// Label the plot with `label`.  Note that labels are not shown
     /// by default; one must call [`Axes::legend`] to display them.
-    #[must_use]
     pub fn label(mut self, label: impl Into<Cow<'a, str>>) -> Self {
         self.options.label = label.into();
         self
     }
 
-    #[must_use]
     pub fn linewidth(mut self, w: f64) -> Self {
         self.options.linewidth = Some(w);
         self
     }
 
-    #[must_use]
     pub fn markersize(mut self, w: f64) -> Self {
         self.options.markersize = Some(w);
         self
     }
 
     /// Set the color of the plot.
-    #[must_use]
     pub fn color(mut self, color: impl Color) -> Self {
         self.options.color = Some(color.rgba());
         self
