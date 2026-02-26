@@ -1,0 +1,730 @@
+use crate::{
+    colors::{self, Color},
+    lines::Line2D,
+    meth,
+};
+use numpy::convert::ToPyArray;
+use pyo3::{
+    intern,
+    prelude::*,
+    types::{PyDict, PyList, PyTuple},
+};
+use std::{borrow::Cow, marker::PhantomData};
+
+#[cfg(feature = "curve-sampling")]
+use curve_sampling::Sampling;
+
+/// Container for most of the (sub-)plot elements: Axis, Tick,
+/// [`Line2D`], Text, Polygon, etc., and sets the coordinate system.
+#[derive(Debug)]
+pub struct Axes {
+    pub(crate) ax: Py<PyAny>,
+}
+
+impl Axes {
+    /// Plot `y` versus `x` as lines and/or markers.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib::{self as plt, colors};
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
+    /// let x = [1., 2., 3., 4.];
+    /// let y = [1., 4., 2., 3.];
+    /// ax.xy(&x, &y).fmt("-").color(colors::Base::R).plot();
+    /// ax.xy(&x, &y).fmt("bo").plot();
+    /// fig.save().to_file("target/XY_plot.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    // FIXME: Do we want to check that `x` and `y` have the same
+    // dimension?  Better error message?
+    pub fn xy<'a, D>(&'a mut self, x: D, y: D) -> XY<'a, D>
+    where
+        D: AsRef<[f64]>,
+    {
+        // The chain leading to plot starts with the data (using this
+        // function) so that additional data may be added, sharing
+        // common options.  We also mutably borrow `self` to reflect that
+        // the final `.plot()` will mutate the underlying Python object.
+        XY {
+            axes: self,
+            options: PlotOptions::new(),
+            data: PlotData::XY(x, y),
+        }
+    }
+
+    /// Plot `y` versus its indices as lines and/or markers.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
+    /// ax.y(&[1., 4., 2., 3.]).plot();
+    /// fig.save().to_file("target/Y_plot.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    pub fn y<'a, D>(&'a mut self, y: D) -> XY<'a, D>
+    where
+        D: AsRef<[f64]>,
+    {
+        XY {
+            axes: self,
+            options: PlotOptions::new(),
+            data: PlotData::Y(y),
+        }
+    }
+
+    /// Convenience function to plot X-Y coordinates coming from `xy`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
+    /// ax.xy_from(&[(1., 2.), (4., 2.), (2., 3.), (3., 4.)]).plot();
+    /// ax.xy_from([(1., 0.), (2., 3.), (3., 1.), (4., 3.)]).plot();
+    /// fig.save().to_file("target/XY_from_plot.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    pub fn xy_from<'a, I>(&'a mut self, xy: I) -> XYFrom<'a, I>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: CoordXY,
+    {
+        XYFrom {
+            axes: self,
+            options: PlotOptions::new(),
+            data: xy,
+        }
+    }
+
+    #[cfg(feature = "curve-sampling")]
+    /// Plot the graph of the function `f` on the interval \[`a`, `b`\].
+    ///
+    /// # Example
+    /// ```
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
+    /// ax.fun(|x| x * x, 0., 1.).plot();
+    /// fig.save().to_file("target/Fun_plot.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    pub fn fun<'a, F, Y, D>(&'a mut self, f: F, a: f64, b: f64) -> Fun<'a, F, D>
+    where
+        F: FnMut(f64) -> Y,
+        Y: curve_sampling::Img<D>,
+    {
+        Fun {
+            axes: self,
+            options: PlotOptions::new(),
+            f,
+            data: PhantomData,
+            a,
+            b,
+            n: 100,
+        }
+    }
+
+    /// Draw the contour lines for the data `z[j,i]` as points
+    /// (`x[i]`, `y[j]`).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib::{self as plt, colors::Tab};
+    /// use ndarray::{Array1, Array2};
+    /// let x: Array1<f64> = Array1::linspace(-1., 1., 30);
+    /// let y: Array1<f64> = Array1::linspace(-1., 1., 30);
+    /// let mut z = Array2::zeros((30, 30));
+    /// for (j, &y) in y.iter().enumerate() {
+    ///     for (i, &x) in x.iter().enumerate() {
+    ///         z[(j, i)] = (0.5 * x).powi(2) + y.powi(2);
+    ///     }
+    /// }
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
+    /// ax.contour(x.as_slice().unwrap(), y.as_slice().unwrap(), &z)
+    ///     .levels(&[0.2, 0.5, 0.8])
+    ///     .colors(&[Tab::Red, Tab::Blue, Tab::Olive])
+    ///     .plot();
+    /// fig.save().to_file("target/contour.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    pub fn contour<'a, D>(&'a mut self, x: D, y: D, z: &'a ndarray::Array2<f64>) -> Contour<'a, D>
+    where
+        D: AsRef<[f64]>,
+    {
+        Contour {
+            axes: self,
+            options: PlotOptions::new(),
+            x,
+            y,
+            z,
+            levels: None,
+            colors: None,
+        }
+    }
+
+    /// Draw the contour lines for function `f` in the rectangle `ab`×`cd`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use matplotlib as plt;
+    /// let (fig, [[mut ax]]) = plt::subplots()?;
+    /// ax.contour_fun([-1., 1.], [-1., 1.], |x, y| {
+    ///     (0.5 * x).powi(2) + y.powi(2)
+    /// })
+    ///     .plot();
+    /// fig.save().to_file("target/contour_fun.pdf")?;
+    /// # Ok::<(), matplotlib::Error>(())
+    /// ```
+    pub fn contour_fun<'a, F>(&'a mut self, ab: [f64; 2], cd: [f64; 2], f: F) -> ContourFun<'a, F>
+    where
+        F: FnMut(f64, f64) -> f64,
+    {
+        ContourFun {
+            axes: self,
+            options: PlotOptions::new(),
+            f,
+            ab,
+            cd,
+            n1: 100,
+            n2: 100,
+            levels: None,
+            colors: None,
+        }
+    }
+
+    #[must_use]
+    pub fn scatter<D>(&mut self, x: D, y: D) -> &mut Self
+    where
+        D: AsRef<[f64]>,
+    {
+        // FIXME: Do we want to check that `x` and `y` have the same
+        // dimension?  Better error message?
+        meth!(self.ax, scatter, py -> {
+            let xn = x.as_ref().to_pyarray(py);
+            let yn = y.as_ref().to_pyarray(py);
+            (xn, yn) })
+        .unwrap();
+        self
+    }
+
+    /// Set the title to `txt` for the Axes.
+    pub fn set_title(&mut self, txt: impl AsRef<str>) -> &mut Self {
+        meth!(self.ax, set_title, (txt.as_ref(),)).unwrap();
+        self
+    }
+
+    /// Set the yaxis' scale.  Possible values for `v` are "linear",
+    /// "log", "symlog", "logit",...
+    pub fn set_yscale(&mut self, v: &str) -> &mut Self {
+        meth!(self.ax, set_yscale, (v,)).unwrap();
+        self
+    }
+
+    /// Configure the grid lines.
+    pub fn grid(&mut self) -> &mut Self {
+        meth!(self.ax, grid, (true,)).unwrap();
+        self
+    }
+
+    /// Set the X-axis view limits.
+    pub fn set_xlim(&mut self, x_min: f64, x_max: f64) {
+        let left = if x_min.is_finite() { Some(x_min) } else { None };
+        let right = if x_max.is_finite() { Some(x_max) } else { None };
+        meth!(self.ax, set_xlim, (left, right)).unwrap();
+        // FIXME: return the value of the Python call?
+    }
+
+    /// Set the Y-axis view limits.
+    pub fn set_ylim(&mut self, y_min: f64, y_max: f64) {
+        let bottom = if y_min.is_finite() { Some(y_min) } else { None };
+        let top = if y_max.is_finite() { Some(y_max) } else { None };
+        meth!(self.ax, set_ylim, (bottom, top)).unwrap();
+    }
+
+    /// Set the label for the X-axis.
+    pub fn set_xlabel(&mut self, label: impl AsRef<str>) -> &mut Self {
+        meth!(self.ax, set_xlabel, (label.as_ref(),)).unwrap();
+        self
+    }
+
+    /// Set the label for the Y-axis.
+    pub fn set_ylabel(&mut self, label: impl AsRef<str>) -> &mut Self {
+        meth!(self.ax, set_ylabel, (label.as_ref(),)).unwrap();
+        self
+    }
+
+    /// Place a legend on the Axes whose elements are taken from
+    /// `lines`.  If `lines` is empty, the elements are automatically
+    /// determined from the labels specified to the axis plots.
+    pub fn legend<L, U>(&mut self, lines: L) -> &mut Self
+    where
+        L: IntoIterator<Item = Line2D, IntoIter = U>,
+        U: ExactSizeIterator<Item = Line2D>,
+    {
+        Python::attach(|py| {
+            let elements = lines.into_iter().map(|l| l.line2d);
+            if elements.len() == 0 {
+                // FIXME: .is_empty is unstable
+                self.ax
+                    .call_method(py, intern!(py, "legend"), (), None)
+                    .unwrap();
+            } else {
+                let dic = PyDict::new(py);
+                dic.set_item("handles", PyList::new(py, elements).unwrap())
+                    .unwrap();
+                self.ax
+                    .call_method(py, intern!(py, "legend"), (), Some(&dic))
+                    .unwrap();
+            }
+            self
+        })
+    }
+
+    pub fn twinx(&mut self) -> Axes {
+        Axes {
+            ax: meth!(self.ax, twinx, ()).unwrap(),
+        }
+    }
+}
+
+enum PlotData<D> {
+    XY(D, D),
+    Y(D),
+}
+
+#[derive(Clone)]
+struct PlotOptions<'a> {
+    fmt: &'a str,
+    animated: bool,
+    antialiased: bool,
+    label: Cow<'a, str>,
+    linewidth: Option<f64>,
+    markersize: Option<f64>,
+    color: Option<[f64; 4]>, // RGBA, if specified
+}
+
+impl<'a> PlotOptions<'a> {
+    fn new() -> PlotOptions<'static> {
+        PlotOptions {
+            fmt: "",
+            animated: false,
+            antialiased: true,
+            label: Cow::Borrowed(""),
+            linewidth: None,
+            markersize: None,
+            color: None,
+        }
+    }
+
+    fn kwargs(&'a self, py: Python<'a>) -> Bound<'a, PyDict> {
+        let kwargs = PyDict::new(py);
+        if self.animated {
+            kwargs.set_item("animated", true).unwrap()
+        }
+        kwargs.set_item("antialiased", self.antialiased).unwrap();
+        if !self.label.is_empty() {
+            let label: &str = self.label.as_ref();
+            kwargs.set_item("label", label).unwrap()
+        }
+        if let Some(w) = self.linewidth {
+            kwargs.set_item("linewidth", w).unwrap()
+        }
+        if let Some(w) = self.markersize {
+            kwargs.set_item("markersize", w).unwrap()
+        }
+        if let Some(rgba) = self.color {
+            let color = PyTuple::new(py, rgba).unwrap();
+            kwargs.set_item("color", color).unwrap()
+        }
+        kwargs
+    }
+
+    /// Plot the ndarrays `x` and `y` and return the corresponding line.
+    fn plot_xy(&self, py: Python<'_>, axes: &Axes, x: &[f64], y: &[f64]) -> Line2D {
+        let x = x.to_pyarray(py);
+        let y = y.to_pyarray(py);
+        let lines = axes
+            .ax
+            .call_method(py, "plot", (x, y, self.fmt), Some(&self.kwargs(py)))
+            .unwrap();
+        let lines: &Bound<PyList> = lines.cast_bound(py).unwrap();
+        // Extract the element from the list of length 1 (1 data plotted)
+        let line2d = lines.get_item(0).unwrap().into();
+        Line2D { line2d }
+    }
+
+    fn plot_y(&self, py: Python<'_>, axes: &Axes, y: &[f64]) -> Line2D {
+        let y = y.to_pyarray(py);
+        let lines = axes
+            .ax
+            .call_method(py, "plot", (y, self.fmt), Some(&self.kwargs(py)))
+            .unwrap();
+        let lines: &Bound<PyList> = lines.cast_bound(py).unwrap();
+        let line2d = lines.get_item(0).unwrap().into();
+        Line2D { line2d }
+    }
+
+    fn plot_data<D: AsRef<[f64]>>(
+        &self,
+        py: Python<'_>,
+        axes: &Axes,
+        data: &PlotData<D>,
+    ) -> Line2D {
+        match data {
+            PlotData::XY(x, y) => self.plot_xy(py, axes, x.as_ref(), y.as_ref()),
+            PlotData::Y(y) => self.plot_y(py, axes, y.as_ref()),
+        }
+    }
+}
+
+/// Declare methods to set the options assuming `self.options` exists.
+macro_rules! set_plotoptions {
+    () => {
+        pub fn fmt(mut self, fmt: &'a str) -> Self {
+            self.options.fmt = fmt;
+            self
+        }
+
+        pub fn animated(mut self) -> Self {
+            self.options.animated = true;
+            self
+        }
+
+        pub fn antialiased(mut self, b: bool) -> Self {
+            self.options.antialiased = b;
+            self
+        }
+
+        /// Label the plot with `label`.  Note that labels are not shown
+        /// by default; one must call [`Axes::legend`] to display them.
+        pub fn label(mut self, label: impl Into<Cow<'a, str>>) -> Self {
+            self.options.label = label.into();
+            self
+        }
+
+        pub fn linewidth(mut self, w: f64) -> Self {
+            self.options.linewidth = Some(w);
+            self
+        }
+
+        pub fn markersize(mut self, w: f64) -> Self {
+            self.options.markersize = Some(w);
+            self
+        }
+
+        /// Set the color of the plot.
+        pub fn color(mut self, color: impl Color) -> Self {
+            self.options.color = Some(color.rgba());
+            self
+        }
+    };
+}
+
+/// Options to plot X-Y data.  Created by [`Axes::xy`] and [`Axes::y`].
+#[must_use]
+pub struct XY<'a, D> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    data: PlotData<D>,
+}
+
+impl<'a, D> XY<'a, D>
+where
+    D: AsRef<[f64]>,
+{
+    set_plotoptions!();
+
+    /// Plot the data with the options specified in [`XY`].
+    pub fn plot(self) -> Line2D {
+        Python::attach(|py| self.options.plot_data(py, self.axes, &self.data))
+    }
+}
+
+/// Options to plot X-Y data.  Created by [`Axes::xy_from`].
+#[must_use]
+pub struct XYFrom<'a, I> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    data: I,
+}
+
+pub trait CoordXY {
+    fn x(&self) -> f64;
+    fn y(&self) -> f64;
+}
+
+impl<T> CoordXY for &T
+where
+    T: CoordXY,
+{
+    #[inline]
+    fn x(&self) -> f64 {
+        (*self).x()
+    }
+    #[inline]
+    fn y(&self) -> f64 {
+        (*self).y()
+    }
+}
+
+impl CoordXY for (f64, f64) {
+    #[inline]
+    fn x(&self) -> f64 {
+        self.0
+    }
+    #[inline]
+    fn y(&self) -> f64 {
+        self.1
+    }
+}
+
+impl CoordXY for (Option<f64>, Option<f64>) {
+    #[inline]
+    fn x(&self) -> f64 {
+        self.0.unwrap_or(f64::NAN)
+    }
+    #[inline]
+    fn y(&self) -> f64 {
+        self.1.unwrap_or(f64::NAN)
+    }
+}
+
+impl CoordXY for [f64; 2] {
+    #[inline]
+    fn x(&self) -> f64 {
+        self[0]
+    }
+    #[inline]
+    fn y(&self) -> f64 {
+        self[1]
+    }
+}
+
+#[cfg(feature = "num-complex")]
+impl CoordXY for num_complex::Complex64 {
+    #[inline]
+    fn x(&self) -> f64 {
+        self.re
+    }
+    #[inline]
+    fn y(&self) -> f64 {
+        self.im
+    }
+}
+
+impl<'a, I> XYFrom<'a, I>
+where
+    I: IntoIterator,
+    <I as IntoIterator>::Item: CoordXY,
+{
+    set_plotoptions!();
+
+    /// Plot the data with the options specified in [`XYFrom`].
+    pub fn plot(self) -> Line2D {
+        let data = self.data.into_iter();
+        let n = data.size_hint().0;
+        let mut x = Vec::with_capacity(n);
+        let mut y = Vec::with_capacity(n);
+        for di in data {
+            x.push(di.x());
+            y.push(di.y());
+        }
+        Python::attach(|py| self.options.plot_xy(py, self.axes, &x, &y))
+    }
+}
+
+/// Options to plot functions (require the library [curve-sampling][]).
+/// Created by [`Axes::fun`].
+///
+/// [curve-sampling]: https://crates.io/crates/curve-sampling
+#[must_use]
+pub struct Fun<'a, F, D> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    f: F,
+    data: PhantomData<D>, // Data produced by `f`.
+    a: f64,               // [a, b] is the interval on which we want to plot f.
+    b: f64,
+    n: usize,
+}
+
+#[cfg(feature = "curve-sampling")]
+impl<'a, F, Y, D> Fun<'a, F, D>
+where
+    F: FnMut(f64) -> Y,
+    Y: curve_sampling::Img<D>,
+{
+    set_plotoptions!();
+
+    /// Plot the data with the options specified in [`XY`].
+    pub fn plot(mut self) -> Line2D {
+        let s = Sampling::fun(&mut self.f, self.a, self.b).n(self.n).build();
+        // Ensure `x` and `y` live to the end of the call to "plot".
+        let x = s.x();
+        let y = s.y();
+        Python::attach(|py| self.options.plot_xy(py, self.axes, &x, &y))
+    }
+
+    /// Set the maximum number of evaluations of the function to build
+    /// the sampling.  Panic if `n` < 2.
+    pub fn n(mut self, n: usize) -> Self {
+        if n < 2 {
+            panic!("matplotlib::Fun::n: at least two points are required.");
+        }
+        self.n = n;
+        self
+    }
+}
+
+pub struct QuadContourSet {
+    contours: Py<PyAny>,
+}
+
+impl QuadContourSet {
+    pub fn set_color(&mut self, c: impl Color) -> &mut Self {
+        Python::attach(|py| meth!(self.contours, set_color, (colors::py(py, c),)).unwrap());
+        self
+    }
+}
+
+macro_rules! set_contour_options {
+    () => {
+        pub fn levels(mut self, levels: &'a [f64]) -> Self {
+            self.levels = Some(levels);
+            self
+        }
+
+        pub fn colors<C: Color>(mut self, colors: impl AsRef<[C]>) -> Self {
+            let colors = colors.as_ref();
+            let mut rgbas = Vec::with_capacity(colors.len());
+            for c in colors {
+                rgbas.push(c.rgba());
+            }
+            self.colors = Some(rgbas);
+            self
+        }
+
+        fn update_dict(&self, d: &mut Bound<PyDict>) {
+            let py = d.py();
+            if let Some(levels) = self.levels {
+                let n = levels.len();
+                let levels = levels.to_pyarray(py);
+                d.set_item("levels", levels).unwrap();
+
+                if let Some(colors) = &self.colors {
+                    if colors.len() >= n {
+                        let colors = PyList::new(py, colors).unwrap();
+                        d.set_item("colors", colors).unwrap();
+                    } else {
+                        let default = self.options.color.unwrap_or([0., 0., 0., 1.]);
+                        let mut colors = colors.clone();
+                        for _ in 0..n - colors.len() {
+                            colors.push(default);
+                        }
+                        let colors = PyList::new(py, colors).unwrap();
+                        d.set_item("colors", colors).unwrap();
+                    }
+                } else if let Some(color) = self.options.color {
+                    // let colors = std::iter::repeat_n(color, n);
+                    let colors = vec![color; n];
+                    let colors = PyList::new(py, colors).unwrap();
+                    d.set_item("colors", colors).unwrap();
+                }
+            }
+        }
+    };
+}
+
+#[must_use]
+pub struct Contour<'a, D> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    x: D,
+    y: D,
+    z: &'a ndarray::Array2<f64>,
+    levels: Option<&'a [f64]>,
+    colors: Option<Vec<[f64; 4]>>,
+}
+
+impl<'a, D> Contour<'a, D>
+where
+    D: AsRef<[f64]>,
+{
+    set_plotoptions!();
+    set_contour_options!();
+
+    pub fn plot(&self) -> QuadContourSet {
+        Python::attach(|py| {
+            let x = self.x.as_ref().to_pyarray(py);
+            let y = self.y.as_ref().to_pyarray(py);
+            let z = self.z.to_pyarray(py);
+            let mut opt = self.options.kwargs(py);
+            self.update_dict(&mut opt);
+            let contours = self
+                .axes
+                .ax
+                .call_method(py, intern!(py, "contour"), (x, y, z), Some(&opt))
+                .unwrap();
+            QuadContourSet { contours }
+        })
+    }
+}
+
+#[must_use]
+pub struct ContourFun<'a, F> {
+    axes: &'a Axes,
+    options: PlotOptions<'a>,
+    f: F,
+    ab: [f64; 2],
+    cd: [f64; 2],
+    n1: usize, // FIXME: want to be more versatile than an equispaced grid?
+    n2: usize,
+    levels: Option<&'a [f64]>,
+    colors: Option<Vec<[f64; 4]>>,
+}
+
+impl<'a, F> ContourFun<'a, F>
+where
+    F: FnMut(f64, f64) -> f64,
+{
+    set_plotoptions!();
+    set_contour_options!();
+
+    pub fn plot(&mut self) -> QuadContourSet {
+        let mut x = Vec::with_capacity(self.n1);
+        let mut y = Vec::with_capacity(self.n2);
+        let mut z = ndarray::Array2::zeros((self.n2, self.n1));
+        let a = self.ab[0];
+        let dx = (self.ab[1] - a) / (self.n1 - 1) as f64;
+        for i in 0..self.n1 {
+            x.push(a + dx * i as f64);
+        }
+        let c = self.cd[0];
+        let dy = (self.cd[1] - c) / (self.n2 - 1) as f64;
+        for j in 0..self.n2 {
+            y.push(c + dy * j as f64);
+        }
+        for (j, &y) in y.iter().enumerate() {
+            for (i, &x) in x.iter().enumerate() {
+                z[(j, i)] = (self.f)(x, y);
+            }
+        }
+        Python::attach(|py| {
+            let x = x.to_pyarray(py);
+            let y = y.to_pyarray(py);
+            let z = z.to_pyarray(py);
+            let mut opt = self.options.kwargs(py);
+            self.update_dict(&mut opt);
+            let contours = self
+                .axes
+                .ax
+                .call_method(py, intern!(py, "contour"), (x, y, z), Some(&opt))
+                .unwrap();
+            QuadContourSet { contours }
+        })
+    }
+}
