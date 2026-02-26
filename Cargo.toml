@@ -13,18 +13,18 @@ categories = ["science", "visualization", "mathematics", "graphics"]
 rust-version = "1.85"
 
 [dependencies]
-numpy = "0.24.0"
-ndarray = "0.16.1"
+numpy = "0.28.0"
+ndarray = "0.17.2"
 curve-sampling = { version = "0.6", optional = true }
 num-complex = { version = "0.4.6", optional = true }
 
 [dependencies.pyo3]
-version = "0.24.1"
+version = "0.28.2"
 features = ["auto-initialize"]
 
 [features]
 default = ["curve-sampling"]
 
 [dev-dependencies]
-doc-comment = "0.3.3"
-polars-core = { version = "0.46.0", features = ["fmt"] }
+doc-comment = "0.3.4"
+polars-core = { version = "0.53.0", features = ["fmt"] }

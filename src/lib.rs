@@ -43,13 +43,13 @@ macro_rules! getattr {
 
 macro_rules! meth {
     ($obj: expr, $m: ident, $py: ident -> $args: expr) => {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let $py = py;
             $obj.call_method1(py, intern!(py, stringify!($m)), $args)
         })
     };
     ($obj: expr, $m: ident, $args: expr) => {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             $obj.call_method1(py, intern!(py, stringify!($m)), $args)
         })
     };
@@ -108,7 +108,7 @@ impl From<&ImportError> for Error {
 
 /// Import and return a handle to the module `$m`.
 macro_rules! pyimport { ($name: path, $m: literal) => {
-    Python::with_gil(|py|
+    Python::attach(|py|
         match PyModule::import(py, intern!(py, $m)) {
             Ok(m) => Ok(m.into()),
             Err(e) => {
@@ -124,7 +124,7 @@ macro_rules! pyimport { ($name: path, $m: literal) => {
 }}
 
 /// ⚠ Accessing these may try to lock Python's GIL.  Make sure it is
-/// executed outside a call to `Python::with_gil`.
+/// executed outside a call to `Python::attach`.
 static FIGURE: LazyLock<Result<Py<PyModule>, ImportError>> =
     LazyLock::new(|| {
         pyimport!(matplotlib::FIGURE, "matplotlib.figure")
@@ -146,13 +146,13 @@ static PYPLOT: LazyLock<Result<Py<PyModule>, ImportError>> =
 /// [`Line2D`], Text, Polygon, etc., and sets the coordinate system.
 #[derive(Debug)]
 pub struct Axes {
-    ax: PyObject,
+    ax: Py<PyAny>,
 }
 
 /// The top level container for all the plot elements.
 #[derive(Debug)]
 pub struct Figure {
-    fig: PyObject, // instance of matplotlib.figure.Figure
+    fig: Py<PyAny>, // instance of matplotlib.figure.Figure
 }
 
 /// A line — the line can have both a solid linestyle connecting all
@@ -160,7 +160,7 @@ pub struct Figure {
 /// drawing of the solid line is influenced by the drawstyle, e.g.,
 /// one can create "stepped" lines in various styles.
 pub struct Line2D {
-    line2d: PyObject,
+    line2d: Py<PyAny>,
 }
 
 #[inline(always)]
@@ -185,7 +185,7 @@ impl Figure {
     /// with [`show`].  They can be [saved][Figure::save] to files.
     pub fn new() -> Result<Figure, Error> {
         let figure = FIGURE.as_ref()?;
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let fig = getattr!(py, figure, "Figure")
                 .call0(py).unwrap();
             Ok(Self { fig })
@@ -196,7 +196,7 @@ impl Figure {
     pub fn subplots<const R: usize, const C: usize>(
         &self
     ) -> Result<[[Axes; C]; R], Error> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let axs = self.fig
                 .bind(py)
                 .call_method1("subplots", (R, C))?;
@@ -205,22 +205,22 @@ impl Figure {
                 if C == 1 {
                     axes = grid(|_,_| Axes { ax: axs.clone().unbind() });
                 } else { // C > 1
-                    let axg: &Bound<PyArray1<PyObject>> =
-                        axs.downcast().unwrap();
+                    let axg: &Bound<PyArray1<Py<PyAny>>> =
+                        axs.cast().unwrap();
                     axes = grid(|_,c| {
                         let ax = axg.get_owned(c).unwrap();
                         Axes { ax } });
                 }
             } else { // R > 1
                 if C == 1 {
-                    let axg: &Bound<PyArray1<PyObject>> =
-                        axs.downcast().unwrap();
+                    let axg: &Bound<PyArray1<Py<PyAny>>> =
+                        axs.cast().unwrap();
                     axes = grid(|r,_| {
                         let ax = axg.get_owned(r).unwrap();
                         Axes { ax } });
                 } else { // C > 1
-                    let axg: &Bound<PyArray2<PyObject>> =
-                        axs.downcast().unwrap();
+                    let axg: &Bound<PyArray2<Py<PyAny>>> =
+                        axs.cast().unwrap();
                     axes = grid(|r, c| {
                         let ax = axg.get_owned([r, c]).unwrap();
                         Axes { ax } });
@@ -239,7 +239,7 @@ impl Figure {
     ///
     /// [GUI]: https://matplotlib.org/stable/api/figure_api.html#matplotlib.figure.Figure.show
     pub fn show(self) -> Result<(), Error> {
-        Python::with_gil(|py|
+        Python::attach(|py|
             match self.fig.call_method0(py, intern!(py, "show")) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(Error::Python(e)),
@@ -253,7 +253,7 @@ impl Figure {
 
     /// Default width: 6.4, default height: 4.8
     pub fn set_size_inches(&mut self, width: f64, height: f64) -> &mut Self {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let kwargs = PyDict::new(py);
             kwargs.set_item("size_inches", (width, height)).unwrap();
             self.fig.call_method(py, intern!(py, "set"), (),
@@ -266,7 +266,7 @@ impl Figure {
 /// Options for saving figures.
 #[must_use]
 pub struct Savefig<'a> {
-    fig: &'a PyObject,
+    fig: &'a Py<PyAny>,
     dpi: Option<f64>,
 }
 
@@ -281,7 +281,7 @@ impl<'a> Savefig<'a> {
     }
 
     pub fn to_file(&self, path: impl AsRef<Path>) -> Result<(), Error> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let kwargs = PyDict::new(py);
             if let Some(dpi) = self.dpi {
                 kwargs.set_item("dpi", dpi).unwrap()
@@ -309,7 +309,7 @@ impl<'a> Savefig<'a> {
 /// This implies it must be explicitly deallocated using [`close`].
 pub fn figure() -> Result<Figure, Error> {
     let pyplot = PYPLOT.as_ref()?;
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fig = getattr!(py, pyplot, "figure").call0(py)?;
         Ok(Figure { fig })
     })
@@ -326,7 +326,7 @@ pub fn subplots<const R: usize, const C: usize>(
 /// Display all open figures created with [`figure`] or [`subplots`].
 pub fn show() {
     let pyplot = PYPLOT.as_ref().unwrap();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         // FIXME: What do we want to do with the errors?
         getattr!(py, pyplot, "show").call0(py).unwrap();
     })
@@ -335,7 +335,7 @@ pub fn show() {
 /// Close the figure `fig` (created with [`figure`] or [`subplots`]).
 pub fn close(fig: Figure) {
     let pyplot = PYPLOT.as_ref().unwrap();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         getattr!(py, pyplot, "close").call1(py, (fig.fig,)).unwrap();
     })
 }
@@ -343,7 +343,7 @@ pub fn close(fig: Figure) {
 /// Close all figures created with [`figure`] or [`subplots`].
 pub fn close_all() {
     let pyplot = PYPLOT.as_ref().unwrap();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         getattr!(py, pyplot, "close").call1(py, ("all",)).unwrap();
     })
 }
@@ -593,7 +593,7 @@ impl Axes {
     where L: IntoIterator<Item=Line2D, IntoIter = U>,
           U: ExactSizeIterator<Item = Line2D>
     {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let elements = lines.into_iter().map(|l| l.line2d);
             if elements.len() == 0 { // FIXME: .is_empty is unstable
                 self.ax.call_method(py, intern!(py, "legend"), (), None)
@@ -672,7 +672,7 @@ impl<'a> PlotOptions<'a> {
         let y = y.to_pyarray(py);
         let lines = axes.ax.call_method(py,
             "plot", (x, y, self.fmt), Some(&self.kwargs(py))).unwrap();
-        let lines: &Bound<PyList> = lines.downcast_bound(py).unwrap();
+        let lines: &Bound<PyList> = lines.cast_bound(py).unwrap();
         // Extract the element from the list of length 1 (1 data plotted)
         let line2d = lines.get_item(0).unwrap().into();
         Line2D { line2d }
@@ -683,7 +683,7 @@ impl<'a> PlotOptions<'a> {
         let y = y.to_pyarray(py);
         let lines = axes.ax.call_method(py,
             "plot", (y, self.fmt), Some(&self.kwargs(py))).unwrap();
-        let lines: &Bound<PyList> = lines.downcast_bound(py).unwrap();
+        let lines: &Bound<PyList> = lines.cast_bound(py).unwrap();
         let line2d = lines.get_item(0).unwrap().into();
         Line2D { line2d }
     }
@@ -756,7 +756,7 @@ where D: AsRef<[f64]> {
 
     /// Plot the data with the options specified in [`XY`].
     pub fn plot(self) -> Line2D {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.options.plot_data(py, self.axes, &self.data)
         })
     }
@@ -826,7 +826,7 @@ where I: IntoIterator,
             x.push(di.x());
             y.push(di.y());
         }
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.options.plot_xy(py, self.axes, &x, &y)
         })
     }
@@ -862,7 +862,7 @@ where F: FnMut(f64) -> Y,
         // Ensure `x` and `y` live to the end of the call to "plot".
         let x = s.x();
         let y = s.y();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.options.plot_xy(py, self.axes, &x, &y)
         })
     }
@@ -879,12 +879,12 @@ where F: FnMut(f64) -> Y,
 }
 
 pub struct QuadContourSet {
-    contours: PyObject,
+    contours: Py<PyAny>,
 }
 
 impl QuadContourSet {
     pub fn set_color(&mut self, c: impl Color) -> &mut Self {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             meth!(self.contours, set_color, (colors::py(py, c),)).unwrap()
         });
         self
@@ -954,7 +954,7 @@ where D: AsRef<[f64]> {
     set_contour_options!();
 
     pub fn plot(&self) -> QuadContourSet {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let x = self.x.as_ref().to_pyarray(py);
             let y = self.y.as_ref().to_pyarray(py);
             let z = self.z.to_pyarray(py);
@@ -1008,7 +1008,7 @@ where F: FnMut(f64, f64) -> f64 {
                 z[(j, i)] = (self.f)(x, y);
             }
         }
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let x = x.to_pyarray(py);
             let y = y.to_pyarray(py);
             let z = z.to_pyarray(py);
@@ -1038,7 +1038,7 @@ impl Line2D {
     }
 
     pub fn set_label(&mut self, label: impl AsRef<str>) -> &mut Self {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.set_kw(py, "label", label.as_ref());
             self
         })
@@ -1046,21 +1046,21 @@ impl Line2D {
 
     /// Set the color of the line to `c`.
     pub fn set_color(&mut self, c: impl Color) -> &mut Self {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             meth!(self.line2d, set_color, (colors::py(py, c),)).unwrap();
             self
         })
     }
 
     pub fn set_linewidth(&mut self, w: f64) -> &mut Self {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.set_kw(py, "linewidth", w);
             self
         })
     }
 
     pub fn linewidth(self, w: f64) -> Self {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.set_kw(py, "linewidth", w);
             self
         })
