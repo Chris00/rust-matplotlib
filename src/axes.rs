@@ -1,3 +1,9 @@
+//! [`Axes`] represents one (sub-)plot in a figure.
+//!
+//! It contains the plotted data, axis ticks, labels, title, legend,
+//! etc.  Its methods are the main interface for manipulating the
+//! plot.
+
 use crate::{
     colors::{self, Color},
     lines::Line2D,
@@ -22,6 +28,8 @@ pub struct Axes {
     pub(crate) ax: Py<PyAny>,
 }
 
+/// An Axes struct encapsulates all the elements of an individual
+/// (sub-)plot in a figure.
 impl Axes {
     /// Plot `y` versus `x` as lines and/or markers.
     ///
@@ -285,7 +293,7 @@ impl Axes {
         })
     }
 
-    pub fn twinx(&mut self) -> Axes {
+    pub fn twinx(&mut self) -> Self {
         Axes {
             ax: meth!(self.ax, twinx, ()).unwrap(),
         }

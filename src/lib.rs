@@ -94,7 +94,7 @@ static PYPLOT: LazyLock<Result<Py<PyModule>, ImportError>> =
 
 /// Return a new figure.
 /// This figure is tracked by Matplotlib so [`show()`] displays it.
-/// This implies it must be explicitly deallocated using [`close`].
+/// This implies it must be explicitly deallocated using [`close()`].
 pub fn figure() -> Result<Figure, Error> {
     let pyplot = PYPLOT.as_ref()?;
     Python::attach(|py| {
@@ -111,7 +111,7 @@ pub fn subplots<const R: usize, const C: usize>(
     Ok((fig, ax))
 }
 
-/// Display all open figures created with [`figure`] or [`subplots`].
+/// Display all open figures created with [`figure()`] or [`subplots()`].
 pub fn show() {
     let pyplot = PYPLOT.as_ref().unwrap();
     Python::attach(|py| {
@@ -120,7 +120,7 @@ pub fn show() {
     })
 }
 
-/// Close the figure `fig` (created with [`figure`] or [`subplots`]).
+/// Close the figure `fig` (created with [`figure()`] or [`subplots()`]).
 pub fn close(fig: Figure) {
     let pyplot = PYPLOT.as_ref().unwrap();
     Python::attach(|py| {
@@ -128,7 +128,7 @@ pub fn close(fig: Figure) {
     })
 }
 
-/// Close all figures created with [`figure`] or [`subplots`].
+/// Close all figures created with [`figure()`] or [`subplots()`].
 pub fn close_all() {
     let pyplot = PYPLOT.as_ref().unwrap();
     Python::attach(|py| {
