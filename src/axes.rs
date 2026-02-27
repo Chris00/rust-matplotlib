@@ -298,6 +298,10 @@ impl Axes {
             ax: meth!(self.ax, twinx, ()).unwrap(),
         }
     }
+
+    pub fn xaxis_date(&mut self) {
+        meth!(self.ax, xaxis_date, ()).unwrap();
+    }
 }
 
 enum PlotData<D> {
