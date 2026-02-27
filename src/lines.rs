@@ -1,8 +1,11 @@
+//!
+
 use crate::{
     colors::{self, Color},
-    meth,
 };
 use pyo3::{intern, prelude::*, types::PyDict};
+
+include!("macros.rs");
 
 /// A line — the line can have both a solid linestyle connecting all
 /// the vertices, and a marker at each vertex. Additionally, the

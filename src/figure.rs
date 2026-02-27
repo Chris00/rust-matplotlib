@@ -1,5 +1,5 @@
 use crate::axes::Axes;
-use crate::{getattr, pyimport, Error, ImportError};
+use crate::{Error, ImportError};
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{
     exceptions::{PyFileNotFoundError, PyPermissionError},
@@ -8,6 +8,8 @@ use pyo3::{
     types::PyDict,
 };
 use std::{path::Path, sync::LazyLock};
+
+include!("macros.rs");
 
 /// The top level container for all the plot elements.
 #[derive(Debug)]

@@ -1,13 +1,12 @@
-#![macro_use]
 
-#[macro_export]
+#[allow(unused_macros)]
 macro_rules! getattr {
     ($py: ident, $lib: expr, $f: literal) => {
         $lib.getattr($py, intern!($py, $f)).unwrap()
     };
 }
 
-#[macro_export]
+#[allow(unused_macros)]
 macro_rules! meth {
     ($obj: expr, $m: ident, $py: ident -> $args: expr) => {
         Python::attach(|py| {
@@ -23,7 +22,7 @@ macro_rules! meth {
 }
 
 /// Import and return a handle to the module `$m`.
-#[macro_export]
+#[allow(unused_macros)]
 macro_rules! pyimport { ($name: path, $m: literal) => {
     Python::attach(|py|
         match PyModule::import(py, intern!(py, $m)) {

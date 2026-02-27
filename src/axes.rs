@@ -1,7 +1,6 @@
 use crate::{
     colors::{self, Color},
     lines::Line2D,
-    meth,
 };
 use numpy::convert::ToPyArray;
 use pyo3::{
@@ -13,6 +12,8 @@ use std::{borrow::Cow, marker::PhantomData};
 
 #[cfg(feature = "curve-sampling")]
 use curve_sampling::Sampling;
+
+include!("macros.rs");
 
 /// Container for most of the (sub-)plot elements: Axis, Tick,
 /// [`Line2D`], Text, Polygon, etc., and sets the coordinate system.
