@@ -24,6 +24,7 @@ use figure::Figure;
 pub mod axes;
 use axes::Axes;
 pub mod lines;
+pub mod text;
 include!("macros.rs");
 
 /// Possible errors of matplotlib functions.

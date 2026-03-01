@@ -7,6 +7,7 @@
 use crate::{
     colors::{self, Color},
     lines::Line2D,
+    text::Text,
 };
 use numpy::convert::ToPyArray;
 use pyo3::{
@@ -301,6 +302,17 @@ impl Axes {
 
     pub fn xaxis_date(&mut self) {
         meth!(self.ax, xaxis_date, ()).unwrap();
+    }
+
+    pub fn get_xticklabels(&mut self) -> Vec<Text> {
+        Python::attach(|py| {
+            let labels: Vec<_> = self.ax.bind(py)
+                .call_method1(intern!(py, "get_xticklabels"), ())
+                .unwrap()
+                .extract()
+                .unwrap();
+            labels
+        })
     }
 }
 
@@ -739,5 +751,23 @@ where
                 .unwrap();
             QuadContourSet { contours }
         })
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::figure::Figure;
+
+    #[test]
+    fn test_get_xticklabels() -> Result<(), crate::Error> {
+        let fig = Figure::new()?;
+        let [[mut ax]] = fig.subplots()?;
+        ax.xy(&[0., 1.], &[0., 1.]).plot();
+        for l in ax.get_xticklabels() {
+            l.set_rotation(45.);
+        }
+        fig.save().to_file("target/test_get_xticklabels.pdf")?;
+        Ok(())
     }
 }
