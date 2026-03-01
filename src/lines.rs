@@ -1,4 +1,5 @@
-//!
+//! 2D [lines](https://matplotlib.org/stable/api/lines_api.html) with
+//! support for a variety of line styles, markers, colors, etc.
 
 use crate::{
     colors::{self, Color},

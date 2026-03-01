@@ -1,4 +1,4 @@
-//! Matplotlib colors.
+//! Matplotlib [colors](https://matplotlib.org/stable/api/colors_api.html).
 //!
 //! This module defines a [`Color`] trait and implements it for `[r,
 //! g, b]`, `[r, g, b, a]` (where `r`, `g`, `b`, `a` are `f64` numbers

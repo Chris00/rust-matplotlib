@@ -1,3 +1,5 @@
+//! [`Figure`] and `SubFigure` objects.
+
 use crate::axes::Axes;
 use crate::{Error, ImportError};
 use numpy::{PyArray1, PyArray2, PyArrayMethods};

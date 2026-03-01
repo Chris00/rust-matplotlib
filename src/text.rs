@@ -1,4 +1,5 @@
-//! Structs for including text in a figure.
+//! [Text](https://matplotlib.org/stable/api/text_api.html) included
+//! in a figure.
 
 use std::convert::Infallible;
 
