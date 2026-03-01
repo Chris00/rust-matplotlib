@@ -11,11 +11,9 @@
 
 use std::{
     fmt::{Display, Formatter},
-    sync::LazyLock,
 };
 use pyo3::{
-    prelude::*,
-    intern,
+    prelude::*, sync::PyOnceLock
 };
 
 pub mod colors;
@@ -78,13 +76,6 @@ impl From<&ImportError> for Error {
     }
 }
 
-/// ⚠ Accessing these may try to lock Python's GIL.  Make sure it is
-/// executed outside a call to `Python::attach`.
-static PYPLOT: LazyLock<Result<Py<PyModule>, ImportError>> =
-    LazyLock::new(|| {
-        pyimport!(matplotlib::PYPLOT, "matplotlib.pyplot")
-    });
-
 // RuntimeWarning: More than 20 figures have been opened. Figures
 // created through the pyplot interface (`matplotlib.pyplot.figure`)
 // are retained until explicitly closed and may consume too much
@@ -92,15 +83,27 @@ static PYPLOT: LazyLock<Result<Py<PyModule>, ImportError>> =
 //
 // => Do not use pyplot interface (since we need handles anyway).
 
+fn pyplot<'a, 'py>(
+    py: Python<'py>,
+    f: &'a PyOnceLock<Py<PyAny>>,
+    attr_name: &str
+) -> Result<&'a Bound<'py, PyAny>, Error> {
+    f.get_or_try_init(py, || {
+        Ok(py.import("matplotlib.pyplot")?
+            .getattr(attr_name)?
+            .unbind())
+    })
+        .map(|f| f.bind(py))
+}
 
 /// Return a new figure.
 /// This figure is tracked by Matplotlib so [`show()`] displays it.
 /// This implies it must be explicitly deallocated using [`close()`].
 pub fn figure() -> Result<Figure, Error> {
-    let pyplot = PYPLOT.as_ref()?;
+    static FIG: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     Python::attach(|py| {
-        let fig = getattr!(py, pyplot, "figure").call0(py)?;
-        Ok(Figure { fig })
+        let fig = pyplot(py, &FIG, "figure")?;
+        Ok(Figure { fig: fig.call0()?.unbind() })
     })
 }
 
@@ -114,26 +117,34 @@ pub fn subplots<const R: usize, const C: usize>(
 
 /// Display all open figures created with [`figure()`] or [`subplots()`].
 pub fn show() {
-    let pyplot = PYPLOT.as_ref().unwrap();
+    static SHOW: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     Python::attach(|py| {
-        // FIXME: What do we want to do with the errors?
-        getattr!(py, pyplot, "show").call0(py).unwrap();
+        pyplot(py, &SHOW, "show")
+            .expect("Cannot get matplotlib.pyplot.show")
+            .call0()
+            .expect("matplotlib.pyplot.show did not succeed");
     })
 }
 
 /// Close the figure `fig` (created with [`figure()`] or [`subplots()`]).
 pub fn close(fig: Figure) {
-    let pyplot = PYPLOT.as_ref().unwrap();
+    static CLOSE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     Python::attach(|py| {
-        getattr!(py, pyplot, "close").call1(py, (fig.fig,)).unwrap();
+        pyplot(py, &CLOSE, "close")
+            .expect("Cannot find matplotlib.pyplot.close")
+            .call1((fig.fig,))
+            .expect("matplotlib.pyplot.close did not succeed");
     })
 }
 
 /// Close all figures created with [`figure()`] or [`subplots()`].
 pub fn close_all() {
-    let pyplot = PYPLOT.as_ref().unwrap();
+    static CLOSE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     Python::attach(|py| {
-        getattr!(py, pyplot, "close").call1(py, ("all",)).unwrap();
+        pyplot(py, &CLOSE, "close")
+            .expect("Cannot get matplotlib.pyplot.close")
+            .call1(("all",))
+            .expect("matplotlib.pyplot.close('all') did not succeed");
     })
 }
 

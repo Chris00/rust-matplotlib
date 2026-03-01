@@ -20,21 +20,3 @@ macro_rules! meth {
         })
     };
 }
-
-/// Import and return a handle to the module `$m`.
-#[allow(unused_macros)]
-macro_rules! pyimport { ($name: path, $m: literal) => {
-    Python::attach(|py|
-        match PyModule::import(py, intern!(py, $m)) {
-            Ok(m) => Ok(m.into()),
-            Err(e) => {
-                let mut msg = stringify!($name).to_string();
-                msg.push_str(": ");
-                if let Ok(s) = e.value(py).str() {
-                    let s = s.to_str().unwrap_or("Import error");
-                    msg.push_str(s)
-                }
-                Err(ImportError(msg))
-            }
-        })
-}}

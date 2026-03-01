@@ -1,15 +1,16 @@
 //! [`Figure`] and `SubFigure` objects.
 
 use crate::axes::Axes;
-use crate::{Error, ImportError};
+use crate::Error;
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
+use pyo3::sync::PyOnceLock;
 use pyo3::{
     exceptions::{PyFileNotFoundError, PyPermissionError},
     intern,
     prelude::*,
     types::PyDict,
 };
-use std::{path::Path, sync::LazyLock};
+use std::path::Path;
 
 include!("macros.rs");
 
@@ -18,11 +19,6 @@ include!("macros.rs");
 pub struct Figure {
     pub(crate) fig: Py<PyAny>, // instance of matplotlib.figure.Figure
 }
-
-/// ⚠ Accessing these may try to lock Python's GIL.  Make sure it is
-/// executed outside a call to `Python::attach`.
-static FIGURE: LazyLock<Result<Py<PyModule>, ImportError>> =
-    LazyLock::new(|| pyimport!(matplotlib::FIGURE, "matplotlib.figure"));
 
 #[inline(always)]
 fn grid<const R: usize, const C: usize, U>(f: impl Fn(usize, usize) -> U) -> [[U; C]; R] {
@@ -40,14 +36,21 @@ fn grid<const R: usize, const C: usize, U>(f: impl Fn(usize, usize) -> U) -> [[U
 }
 
 impl Figure {
+    fn cls(py: Python<'_>) -> &Bound<'_, PyAny> {
+        static FIG: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+        FIG.import(py, "matplotlib.figure", "Figure")
+            .expect("Cannot find matplotlib.figure.Figure")
+    }
+
     /// Return a new `Figure`.
     ///
     /// ⚠ The figures created with this function will not be displayed
     /// with [`crate::show`].  They can be [saved][Figure::save] to files.
     pub fn new() -> Result<Figure, Error> {
-        let figure = FIGURE.as_ref()?;
         Python::attach(|py| {
-            let fig = getattr!(py, figure, "Figure").call0(py).unwrap();
+            let fig = Self::cls(py).call0()
+                .expect("New Figure")
+                .unbind();
             Ok(Self { fig })
         })
     }
