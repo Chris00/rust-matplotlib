@@ -29,7 +29,7 @@ pub enum Align {
 
 impl Align {
     #[inline]
-    fn to_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         match self {
             Align::Left => "left",
             Align::Center => "center",
@@ -82,7 +82,7 @@ impl Text {
 
     set!(
         /// Set the horizontal alignment relative to the anchor point.
-        set_horizontalalignment, align, Align, align.to_str());
+        set_horizontalalignment, align, Align, align.as_str());
 
     set!(
         /// Set the rotation of the text.
