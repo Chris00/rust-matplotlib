@@ -314,6 +314,24 @@ impl Axes {
             labels
         })
     }
+
+    /// Display minor ticks on the Axes.
+    ///
+    /// Displaying minor ticks may reduce performance; you may turn
+    /// them off using [`Axes::minorticks_off()`] if drawing speed is
+    /// a problem.
+    pub fn minorticks_on(&mut self) -> &mut Self {
+        meth!(self.ax, minorticks_on, ()).unwrap();
+        self
+    }
+
+    /// Remove minor ticks from the Axes.
+    ///
+    /// See also [`Axes::minorticks_on`].
+    pub fn minorticks_off(&mut self) -> &mut Self {
+        meth!(self.ax, minorticks_off, ()).unwrap();
+        self
+    }
 }
 
 enum PlotData<D> {
@@ -768,6 +786,17 @@ mod test {
             l.set_rotation(45.);
         }
         fig.save().to_file("target/test_get_xticklabels.pdf")?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_minorticks_on() -> Result<(), crate::Error> {
+        let fig = Figure::new()?;
+        let [[mut ax]] = fig.subplots()?;
+        ax.minorticks_on()
+            .grid();
+        ax.xy(&[0., 1.], &[0., 1.]).plot();
+        fig.save().to_file("target/test_minorticks_on.pdf")?;
         Ok(())
     }
 }
