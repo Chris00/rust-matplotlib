@@ -155,15 +155,6 @@ impl<'a> Savefig<'a> {
             }
             self.fig
                 .call_method(py, intern!(py, "savefig"), (path.as_ref(),), Some(&kwargs))
-                .map_err(|e| {
-                    if e.is_instance_of::<PyFileNotFoundError>(py) {
-                        Error::FileNotFoundError
-                    } else if e.is_instance_of::<PyPermissionError>(py) {
-                        Error::PermissionError
-                    } else {
-                        Error::Python(e)
-                    }
-                })
         })?;
         Ok(())
     }

@@ -63,7 +63,13 @@ impl std::error::Error for Error {}
 
 impl From<PyErr> for Error {
     fn from(e: PyErr) -> Self {
-        Error::Python(e)
+        if e.is_instance_of::<PyFileNotFoundError>(py) {
+            Error::FileNotFoundError
+        } else if e.is_instance_of::<PyPermissionError>(py) {
+            Error::PermissionError
+        } else {
+            Error::Python(e)
+        }
     }
 }
 
