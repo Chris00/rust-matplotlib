@@ -13,7 +13,8 @@ use std::{
     fmt::{Display, Formatter},
 };
 use pyo3::{
-    prelude::*, sync::PyOnceLock
+    exceptions::{PyFileNotFoundError, PyPermissionError},
+    intern, prelude::*, sync::PyOnceLock,
 };
 
 pub mod colors;
@@ -61,15 +62,25 @@ If you use Anaconda, see https://github.com/PyO3/pyo3/issues/1554"),
 
 impl std::error::Error for Error {}
 
-impl From<PyErr> for Error {
-    fn from(e: PyErr) -> Self {
-        if e.is_instance_of::<PyFileNotFoundError>(py) {
-            Error::FileNotFoundError
-        } else if e.is_instance_of::<PyPermissionError>(py) {
-            Error::PermissionError
-        } else {
-            Error::Python(e)
-        }
+/// Conversion from `PyErr` to `Error` (requires the Python handle).
+trait IntoError {
+    type T;
+    fn into_error(self, py: Python<'_>) -> Result<Self::T, Error>;
+}
+
+impl<T> IntoError for Result<T, PyErr> {
+    type T = T;
+
+    fn into_error(self, py: Python<'_>) -> Result<T, Error> {
+        self.map_err(|e| {
+            if e.is_instance_of::<PyFileNotFoundError>(py) {
+                Error::FileNotFoundError
+            } else if e.is_instance_of::<PyPermissionError>(py) {
+                Error::PermissionError
+            } else {
+                Error::Python(e)
+            }
+        })
     }
 }
 
@@ -95,8 +106,8 @@ fn pyplot<'a, 'py>(
     attr_name: &str
 ) -> Result<&'a Bound<'py, PyAny>, Error> {
     f.get_or_try_init(py, || {
-        Ok(py.import("matplotlib.pyplot")?
-            .getattr(attr_name)?
+        Ok(py.import("matplotlib.pyplot").into_error(py)?
+            .getattr(attr_name).into_error(py)?
             .unbind())
     })
         .map(|f| f.bind(py))
@@ -109,7 +120,7 @@ pub fn figure() -> Result<Figure, Error> {
     static FIG: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     Python::attach(|py| {
         let fig = pyplot(py, &FIG, "figure")?;
-        Ok(Figure { fig: fig.call0()?.unbind() })
+        Ok(Figure { fig: fig.call0().into_error(py)?.unbind() })
     })
 }
 

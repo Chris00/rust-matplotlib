@@ -1,13 +1,11 @@
 //! [`Figure`] and `SubFigure` objects.
 
-use crate::axes::Axes;
-use crate::Error;
+use crate::{axes::Axes, Error, IntoError};
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
-use pyo3::sync::PyOnceLock;
 use pyo3::{
-    exceptions::{PyFileNotFoundError, PyPermissionError},
     intern,
     prelude::*,
+    sync::PyOnceLock,
     types::PyDict,
 };
 use std::path::Path;
@@ -58,7 +56,8 @@ impl Figure {
     /// Return a grid of subplots with `R` rows and `C` columns.
     pub fn subplots<const R: usize, const C: usize>(&self) -> Result<[[Axes; C]; R], Error> {
         Python::attach(|py| {
-            let axs = self.fig.bind(py).call_method1("subplots", (R, C))?;
+            let axs = self.fig.bind(py)
+                .call_method1("subplots", (R, C)).into_error(py)?;
             let axes;
             if R == 1 {
                 if C == 1 {
@@ -155,6 +154,7 @@ impl<'a> Savefig<'a> {
             }
             self.fig
                 .call_method(py, intern!(py, "savefig"), (path.as_ref(),), Some(&kwargs))
+                .into_error(py)
         })?;
         Ok(())
     }
