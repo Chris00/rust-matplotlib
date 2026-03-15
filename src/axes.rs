@@ -37,7 +37,7 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib::{self as plt, colors};
+    /// use matplotlib::{pyplot as plt, colors};
     /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// let x = [1., 2., 3., 4.];
     /// let y = [1., 4., 2., 3.];
@@ -68,7 +68,7 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib as plt;
+    /// use matplotlib::pyplot as plt;
     /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.y(&[1., 4., 2., 3.]).plot();
     /// fig.save().to_file("target/Y_plot.pdf")?;
@@ -90,13 +90,15 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib as plt;
+    /// use matplotlib::pyplot as plt;
     /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.xy_from(&[(1., 2.), (4., 2.), (2., 3.), (3., 4.)]).plot();
     /// ax.xy_from([(1., 0.), (2., 3.), (3., 1.), (4., 3.)]).plot();
     /// fig.save().to_file("target/XY_from_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
+    // FIXME: show an example combining iterators using `zip`.  The
+    // `covid` research project may serve as a source of inspiration.
     pub fn xy_from<'a, I>(&'a mut self, xy: I) -> XYFrom<'a, I>
     where
         I: IntoIterator,
@@ -114,7 +116,7 @@ impl Axes {
     ///
     /// # Example
     /// ```
-    /// use matplotlib as plt;
+    /// use matplotlib::pyplot as plt;
     /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.fun(|x| x * x, 0., 1.).plot();
     /// fig.save().to_file("target/Fun_plot.pdf")?;
@@ -142,7 +144,7 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib::{self as plt, colors::Tab};
+    /// use matplotlib::{pyplot as plt, colors::Tab};
     /// use ndarray::{Array1, Array2};
     /// let x: Array1<f64> = Array1::linspace(-1., 1., 30);
     /// let y: Array1<f64> = Array1::linspace(-1., 1., 30);
@@ -180,7 +182,7 @@ impl Axes {
     /// # Example
     ///
     /// ```
-    /// use matplotlib as plt;
+    /// use matplotlib::pyplot as plt;
     /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.contour_fun([-1., 1.], [-1., 1.], |x, y| {
     ///     (0.5 * x).powi(2) + y.powi(2)

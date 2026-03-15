@@ -1,6 +1,6 @@
 // Example for the README
 
-use matplotlib as plt;
+use matplotlib::pyplot as plt;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (fig, [[mut ax]]) = plt::subplots()?;

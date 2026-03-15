@@ -1,5 +1,5 @@
 use polars_core::prelude::*;
-use matplotlib as plt;
+use matplotlib::pyplot as plt;
 
 // Yellow Flag Iris, attributed to Iris pseudacorus flowers were
 // measured in Norfolk marshes in 2018 by LCrossman.
