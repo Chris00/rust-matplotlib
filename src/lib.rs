@@ -188,7 +188,7 @@ mod tests {
         ax.xy(&[1., 2., 3., 4.], &[1., 4., 2., 3.])
             .label("first").plot();
         ax.xy(&[1., 2., 3., 4.], &[4., 2., 3., 1.])
-            .label("second".to_string()).plot();
+            .label(&"second".to_string()).plot();
         ax.legend([]);
         fig.save().to_file("target/a_basic_label.pdf")?;
         Ok(())

@@ -15,7 +15,7 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyList, PyTuple},
 };
-use std::{borrow::Cow, marker::PhantomData};
+use std::marker::PhantomData;
 
 #[cfg(feature = "curve-sampling")]
 use curve_sampling::Sampling;
@@ -344,7 +344,7 @@ struct PlotOptions<'a> {
     fmt: &'a str,
     animated: bool,
     antialiased: bool,
-    label: Cow<'a, str>,
+    label: &'a str,
     linewidth: Option<f64>,
     markersize: Option<f64>,
     color: Option<[f64; 4]>, // RGBA, if specified
@@ -356,7 +356,7 @@ impl<'a> PlotOptions<'a> {
             fmt: "",
             animated: false,
             antialiased: true,
-            label: Cow::Borrowed(""),
+            label: &"",
             linewidth: None,
             markersize: None,
             color: None,
@@ -444,8 +444,8 @@ macro_rules! set_plotoptions {
 
         /// Label the plot with `label`.  Note that labels are not shown
         /// by default; one must call [`Axes::legend`] to display them.
-        pub fn label(mut self, label: impl Into<Cow<'a, str>>) -> Self {
-            self.options.label = label.into();
+        pub fn label(mut self, label: &'a str) -> Self {
+            self.options.label = label;
             self
         }
 
