@@ -33,7 +33,7 @@ jobs:
             rust: stable
     steps:
     - uses: actions/checkout@master
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version: '3.12'
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
@@ -41,7 +41,7 @@ jobs:
       run: python3 -m pip install -U matplotlib
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - name: Setup Miniconda
-      uses: conda-incubator/setup-miniconda@v3.0.4
+      uses: conda-incubator/setup-miniconda@v3
       if: startsWith(matrix.build, 'anaconda macos')
     - name: Install Matplotlib (Anaconda)
       run: $CONDA/bin/conda install conda-forge::matplotlib
