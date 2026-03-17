@@ -103,16 +103,13 @@ impl From<&ImportError> for Error {
     }
 }
 
-/// A dict-like key-value store for config parameters, including
-/// validation.
-///
-/// Validating functions are defined and associated with rc parameters
-/// in [`rcsetup`].
+/// A dict-like key-value store for config parameters.
 #[derive(Debug)]
 pub struct RcParams {
     rc: Py<PyDict>,
 }
 
+/// Rust types that may be used as [`RcParams`] values.
 pub trait RcParamsValue {
     fn into_py<'py>(&self, py: Python<'py>) -> impl IntoPyObject<'py>;
 }
@@ -146,6 +143,12 @@ impl RcParams {
         })
     }
 
+    /// Set the [RcParam][] `key` to `value`.
+    ///
+    /// Note that an improper value may only raise an error later such
+    /// as when [`pyplot::figure`] is called.
+    ///
+    /// [RcParam]: https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams
     pub fn set<'py>(&self, key: &str, value: impl RcParamsValue) -> Result<(), Error> {
         Python::attach(|py| -> Result<_, Error> {
             self.rc.bind(py).set_item(key, value.into_py(py))
@@ -167,6 +170,10 @@ impl RcParams {
     }
 }
 
+/// Return an instance of [`RcParams`] for handling default Matplotlib
+/// values.
+///
+/// Setting values must be done before the figure is created.
 pub fn rc_params() -> &'static RcParams {
     static RCPARAMS: PyOnceLock<RcParams> = PyOnceLock::new();
     Python::attach(|py| {

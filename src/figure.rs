@@ -43,7 +43,8 @@ impl Figure {
     /// Return a new `Figure`.
     ///
     /// ⚠ The figures created with this function will not be displayed
-    /// with [`crate::show`].  They can be [saved][Figure::save] to files.
+    /// with [`show`][crate::pyplot::show].  They can be
+    /// [saved][Figure::save] to files.
     pub fn new() -> Result<Figure, Error> {
         Python::attach(|py| {
             let fig = Self::cls(py).call0()
@@ -98,7 +99,7 @@ impl Figure {
     /// ⚠ [This does not manage an GUI event loop][GUI]. Consequently,
     /// the figure may only be shown briefly or not shown at all if
     /// you or your environment are not managing an event loop.  Use
-    /// [`crate::show()`] for that.
+    /// [`show()`][crate::pyplot::show] for that.
     ///
     /// [GUI]: https://matplotlib.org/stable/api/figure_api.html#matplotlib.figure.Figure.show
     pub fn show(self) -> Result<(), Error> {
