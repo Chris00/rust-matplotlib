@@ -13,8 +13,11 @@ use std::{
     fmt::{Display, Formatter},
 };
 use pyo3::{
-    exceptions::{PyFileNotFoundError, PyPermissionError},
-    intern, prelude::*, sync::PyOnceLock,
+    exceptions::{PyFileNotFoundError, PyValueError, PyPermissionError},
+    intern,
+    prelude::*,
+    types::PyDict,
+    sync::PyOnceLock,
 };
 
 pub mod colors;
@@ -35,6 +38,8 @@ pub enum Error {
     FileNotFoundError,
     /// Permission denied to access or create the filesystem path.
     PermissionError,
+    /// Indicate that the argument is an inappropriate value.
+    ValueError(String),
     /// Other Python errors.
     Python(PyErr),
 }
@@ -53,6 +58,8 @@ If you use Anaconda, see https://github.com/PyO3/pyo3/issues/1554"),
             Error::PermissionError =>
                 write!(f, "Permission denied to access or create the \
                            filesystem path"),
+            Error::ValueError(msg) =>
+                write!(f, "ValueError: {}", msg),
             Error::Python(e) =>
                 write!(f, "Python error: {}", e),
         }
@@ -61,7 +68,8 @@ If you use Anaconda, see https://github.com/PyO3/pyo3/issues/1554"),
 
 impl std::error::Error for Error {}
 
-/// Conversion from `PyErr` to `Error` (requires the Python handle).
+/// Conversion from `PyErr` to `Error`.
+// It requires the Python handle, so the `Into` trait cannot be used.
 trait IntoError {
     type T;
     fn into_error(self, py: Python<'_>) -> Result<Self::T, Error>;
@@ -76,6 +84,9 @@ impl<T> IntoError for Result<T, PyErr> {
                 Error::FileNotFoundError
             } else if e.is_instance_of::<PyPermissionError>(py) {
                 Error::PermissionError
+            } else if e.is_instance_of::<PyValueError>(py) {
+                let msg = e.value(py).str().unwrap();
+                Error::ValueError(msg.to_string_lossy().into_owned())
             } else {
                 Error::Python(e)
             }
@@ -99,17 +110,56 @@ impl From<&ImportError> for Error {
 /// in [`rcsetup`].
 #[derive(Debug)]
 pub struct RcParams {
-    dict: Py<PyAny>,
+    rc: Py<PyDict>,
 }
 
+pub trait RcParamsValue {
+    fn into_py<'py>(&self, py: Python<'py>) -> impl IntoPyObject<'py>;
+}
+
+impl RcParamsValue for &str {
+    fn into_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
+        self
+    }
+}
+
+impl RcParamsValue for usize {
+    fn into_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
+        self
+    }
+}
+
+impl RcParamsValue for f64 {
+    fn into_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
+        self
+    }
+}
+
+// TODO: Make more types implement `RcParamsValue`.
+
 impl RcParams {
+    pub fn get(&self, key: &str) -> Option<Py<PyAny>> {
+        Python::attach(|py| {
+            self.rc.bind(py).get_item(key)
+                .unwrap()
+                .map(|o| o.unbind())
+        })
+    }
+
+    pub fn set<'py>(&self, key: &str, value: impl RcParamsValue) -> Result<(), Error> {
+        Python::attach(|py| -> Result<_, Error> {
+            self.rc.bind(py).set_item(key, value.into_py(py))
+                .into_error(py)
+        })
+    }
+
     /// Return the subset of the `self` dictionary whose keys match
     /// ([`using
     /// re.search()`](https://docs.python.org/3/library/re.html#re.search)) the
     /// given pattern.
     pub fn find_all(&self, pat: &str) -> Vec<String> {
         Python::attach(|py| {
-            self.dict.bind(py)
+            self.rc.bind(py)
                 .call_method1(intern!(py, "find_all"), (pat,)).unwrap()
                 .cast().unwrap()
                 .extract().unwrap()
@@ -117,20 +167,19 @@ impl RcParams {
     }
 }
 
-pub fn rcsetup() {
-    todo!()
-}
-
-#[derive(Debug)]
-pub struct RcParamsRef<'a> {
-    dict: &'a Bound<'a, PyAny>,
-}
-
-fn rc_params(py: Python<'_>) -> RcParamsRef<'_> {
-    static RCPARAMS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-    let dict = RCPARAMS.import(py, "matplotlib", "rcParams")
-        .expect("Cannot find matplotlib.rcParams");
-    RcParamsRef { dict }
+pub fn rc_params() -> &'static RcParams {
+    static RCPARAMS: PyOnceLock<RcParams> = PyOnceLock::new();
+    Python::attach(|py| {
+        RCPARAMS.get_or_init(py, || {
+            let rc = py.import("matplotlib")
+                .expect("Cannot find matplotlib")
+                .getattr("rcParams")
+                .expect("Cannot find matplotlib.rcParams")
+                .cast_into::<PyDict>().unwrap();
+            RcParams { rc: rc.unbind() }
+        });
+        RCPARAMS.get(py).unwrap()
+    })
 }
 
 
