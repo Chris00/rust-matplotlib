@@ -25,6 +25,7 @@ pub mod figure;
 pub mod axes;
 pub mod lines;
 pub mod pyplot;
+pub mod style;
 pub mod text;
 include!("macros.rs");
 

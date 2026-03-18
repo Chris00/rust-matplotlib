@@ -243,18 +243,19 @@ impl Axes {
     }
 
     /// Set the X-axis view limits.
-    pub fn set_xlim(&mut self, x_min: f64, x_max: f64) {
+    pub fn set_xlim(&mut self, x_min: f64, x_max: f64) -> &mut Self {
         let left = if x_min.is_finite() { Some(x_min) } else { None };
         let right = if x_max.is_finite() { Some(x_max) } else { None };
         meth!(self.ax, set_xlim, (left, right)).unwrap();
-        // FIXME: return the value of the Python call?
+        self
     }
 
     /// Set the Y-axis view limits.
-    pub fn set_ylim(&mut self, y_min: f64, y_max: f64) {
+    pub fn set_ylim(&mut self, y_min: f64, y_max: f64) -> &mut Self {
         let bottom = if y_min.is_finite() { Some(y_min) } else { None };
         let top = if y_max.is_finite() { Some(y_max) } else { None };
         meth!(self.ax, set_ylim, (bottom, top)).unwrap();
+        self
     }
 
     /// Set the label for the X-axis.
@@ -266,6 +267,21 @@ impl Axes {
     /// Set the label for the Y-axis.
     pub fn set_ylabel(&mut self, label: impl AsRef<str>) -> &mut Self {
         meth!(self.ax, set_ylabel, (label.as_ref(),)).unwrap();
+        self
+    }
+
+    /// Set the xaxis' tick locations and optionally tick labels.
+    // FIXME: ticks labels
+    pub fn set_xticks(&mut self, ticks: impl IntoIterator<Item=f64>) -> &mut Self {
+        let ticks: Vec<_> = ticks.into_iter().collect();
+        meth!(self.ax, set_xticks, (ticks,)).unwrap();
+        self
+    }
+
+    /// Set the yaxis' tick locations and optionally tick labels.
+    pub fn set_yticks(&mut self, ticks: impl IntoIterator<Item=f64>) -> &mut Self {
+        let ticks: Vec<_> = ticks.into_iter().collect();
+        meth!(self.ax, set_yticks, (ticks,)).unwrap();
         self
     }
 
@@ -346,10 +362,13 @@ struct PlotOptions<'a> {
     fmt: &'a str,
     animated: bool,
     antialiased: bool,
+    color: Option<[f64; 4]>, // RGBA, if specified
     label: &'a str,
     linewidth: Option<f64>,
+    markeredgewidth: Option<f64>,
     markersize: Option<f64>,
-    color: Option<[f64; 4]>, // RGBA, if specified
+    scalex: bool,
+    scaley: bool,
 }
 
 impl<'a> PlotOptions<'a> {
@@ -358,10 +377,13 @@ impl<'a> PlotOptions<'a> {
             fmt: "",
             animated: false,
             antialiased: true,
+            color: None,
             label: &"",
             linewidth: None,
+            markeredgewidth: None,
             markersize: None,
-            color: None,
+            scalex: true, // Default
+            scaley: true, // Default
         }
     }
 
@@ -372,11 +394,13 @@ impl<'a> PlotOptions<'a> {
         }
         kwargs.set_item("antialiased", self.antialiased).unwrap();
         if !self.label.is_empty() {
-            let label: &str = self.label.as_ref();
-            kwargs.set_item("label", label).unwrap()
+            kwargs.set_item("label", self.label).unwrap()
         }
         if let Some(w) = self.linewidth {
             kwargs.set_item("linewidth", w).unwrap()
+        }
+        if let Some(w) = self.markeredgewidth {
+            kwargs.set_item("markeredgewidth", w).unwrap()
         }
         if let Some(w) = self.markersize {
             kwargs.set_item("markersize", w).unwrap()
@@ -385,6 +409,8 @@ impl<'a> PlotOptions<'a> {
             let color = PyTuple::new(py, rgba).unwrap();
             kwargs.set_item("color", color).unwrap()
         }
+        kwargs.set_item("scalex", self.scalex).unwrap();
+        kwargs.set_item("scaley", self.scaley).unwrap();
         kwargs
     }
 
@@ -456,6 +482,11 @@ macro_rules! set_plotoptions {
             self
         }
 
+        pub fn markeredgewidth(mut self, w: f64) -> Self {
+            self.options.markeredgewidth = Some(w);
+            self
+        }
+
         pub fn markersize(mut self, w: f64) -> Self {
             self.options.markersize = Some(w);
             self
@@ -464,6 +495,16 @@ macro_rules! set_plotoptions {
         /// Set the color of the plot.
         pub fn color(mut self, color: impl Color) -> Self {
             self.options.color = Some(color.rgba());
+            self
+        }
+
+        pub fn scalex(mut self, b: bool) -> Self {
+            self.options.scalex = b;
+            self
+        }
+
+        pub fn scaley(mut self, b: bool) -> Self {
+            self.options.scaley = b;
             self
         }
     };

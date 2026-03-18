@@ -28,3 +28,4 @@ default = ["curve-sampling"]
 [dev-dependencies]
 doc-comment = "0.3.4"
 polars-core = { version = "0.53.0", features = ["fmt"] }
+anyhow = "1.0.102"
