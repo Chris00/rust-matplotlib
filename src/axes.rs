@@ -15,6 +15,7 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyList, PyTuple},
 };
+use ndarray::Array2;
 use std::marker::PhantomData;
 
 #[cfg(feature = "curve-sampling")]
@@ -208,19 +209,13 @@ impl Axes {
         }
     }
 
-    #[must_use]
-    pub fn scatter<D>(&mut self, x: D, y: D) -> &mut Self
+    /// Scatter plot of `y` vs. `x` with optional varying marker size
+    /// and/or color.
+    pub fn scatter<'a, D>(&'a mut self, x: D, y: D) -> Scatter<'a, D>
     where
         D: AsRef<[f64]>,
     {
-        // FIXME: Do we want to check that `x` and `y` have the same
-        // dimension?  Better error message?
-        meth!(self.ax, scatter, py -> {
-            let xn = x.as_ref().to_pyarray(py);
-            let yn = y.as_ref().to_pyarray(py);
-            (xn, yn) })
-        .unwrap();
-        self
+        Scatter::new(self, x, y)
     }
 
     /// Set the title to `txt` for the Axes.
@@ -663,6 +658,172 @@ where
         }
         self.n = n;
         self
+    }
+}
+
+#[must_use]
+pub struct Scatter<'a, D> {
+    axes: &'a Axes,
+    x: D,
+    y: D,
+    // Optional arguments are different from other plot types.
+    s: Option<&'a [f64]>,
+    c: Option<ScatterColorMat<'a>>, // Slice of RGBA
+    marker: Option<&'a str>, // TODO: generalize
+    cmap: Option<()>, // TODO
+    norm: Option<()>, // TODO
+    // FIXME: It is an error to use vmin/vmax when a norm instance is
+    // given (but using a str norm name together with vmin/vmax is
+    // acceptable).
+    vmin: Option<f64>,
+    vmax: Option<f64>,
+    alpha: Option<f64>, // ∈ [0, 1]
+    linewidths: Option<f64>, // TODO: support array-like
+    // edgecolors
+    // colorizer
+    // plotnonfinite
+}
+
+impl<'a, D> Scatter<'a, D>
+where D: AsRef<[f64]> {
+    fn new(axes: &'a Axes, x: D, y: D) -> Self {
+        Self {
+            axes, x, y,
+            s: None, c: None, marker: None, cmap: None, norm: None,
+            vmin: None, vmax: None, alpha: None, linewidths: None,
+        }
+    }
+
+    /// The marker size in points² (typographic points are 1/72 in).
+    ///
+    /// Default is rcParams['lines.markersize'] ** 2.
+    pub fn s(mut self, s: &'a [f64]) -> Self {
+        self.s = Some(s);
+        self
+    }
+
+    /// Specify the marker colors.
+    pub fn c<C>(mut self, colors: impl ScatterColors) -> Self
+    where C: Color,
+    {
+        self.c = Some(ScatterColorMat::Colors(colors.as_mat()));
+        self
+    }
+
+    /// Specify the marker colors as a sequence of `n` numbers to be
+    /// mapped to colors using `cmap` and `norm` where `n` is the
+    /// length of the data (see [`Axes::scatter`]).
+    pub fn cm(mut self, colors: &'a [usize]) -> Self {
+        self.c = Some(ScatterColorMat::Cmap(colors));
+        self
+    }
+
+    /// Set the marker style.
+    pub fn marker(mut self, m: &'a str) -> Self {
+        self.marker = Some(m);
+        self
+    }
+
+    /// When using scalar data and no explicit `norm`, `vmin` and
+    /// [`vmax`] define the data range that the colormap covers.
+    pub fn vmin(mut self, v: f64) -> Self {
+        self.vmin = Some(v);
+        self
+    }
+
+    /// When using scalar data and no explicit `norm`, [`vmin`] and
+    /// `vmax` define the data range that the colormap covers.
+    pub fn vmax(mut self, v: f64) -> Self {
+        self.vmax = Some(v);
+        self
+    }
+
+    /// Set the alpha blending value, between 0 (transparent) and 1
+    /// (opaque).
+    pub fn alpha(mut self, alpha: f64) -> Self {
+        self.alpha = Some(alpha.clamp(0., 1.));
+        self
+    }
+
+    /// The linewidth of the marker edges.
+    ///
+    /// Note: The default `edgecolors` is "face".  You may want to
+    /// change this as well.
+    pub fn linewidths(mut self, lw: f64) -> Self {
+        self.linewidths = Some(lw);
+        self
+    }
+
+    pub fn plot(self) {
+        // FIXME: Do we want to check that `x` and `y` have the same
+        // dimension?  Better error message?
+        Python::attach(|py| {
+            match self.c {
+                Some(ScatterColorMat::Cmap(v)) => {
+                    self.plot_with_colors(py, v.to_pyarray(py));
+                }
+                Some(ScatterColorMat::Colors(ref m)) => {
+                    self.plot_with_colors(py, m.to_pyarray(py));
+                }
+                None => self.plot_with_colors(py, None::<&str>),
+            }
+        })
+    }
+
+    fn plot_with_colors<'py>(
+        &self,
+        py: Python<'py>,
+        c: impl IntoPyObject<'py>,
+    ) {
+        let xn = self.x.as_ref().to_pyarray(py);
+        let yn = self.y.as_ref().to_pyarray(py);
+        self.axes.ax.call_method1(py, intern!(py, "scatter"),
+            (xn, yn, self.s, c, self.marker, self.cmap,
+                 self.norm, self.vmin, self.vmax, self.alpha,
+                 self.linewidths))
+            .unwrap();
+    }
+}
+
+enum ScatterColorMat<'a> {
+    Cmap(&'a [usize]),
+    Colors(ndarray::Array2<f64>),
+}
+
+/// Possible color specifications for [`Axes::scatter`] plots.
+pub trait ScatterColors {
+    #[doc(hidden)]
+    fn as_mat(&self) -> ndarray::Array2<f64>;
+}
+
+impl<C> ScatterColors for &[C]
+where
+    C: Color,
+{
+    fn as_mat(&self) -> ndarray::Array2<f64> {
+        let colors = self.as_ref();
+        let n = colors.len();
+        let mut c: Array2<f64> = ndarray::Array2::zeros((n, 4));
+        for i in 0 .. n {
+            let ci = colors[i].rgba();
+            for j in 0 .. 4 {
+                c[(i,j)] = ci[j];
+            }
+        }
+        c
+    }
+}
+
+impl<C: Color> ScatterColors for C {
+    fn as_mat(&self) -> ndarray::Array2<f64> {
+        // A single row array gives the same color for all markers.
+        let mut c = ndarray::Array2::zeros((1, 4));
+        let color = self.rgba();
+        c[(0,0)] = color[0];
+        c[(0,1)] = color[1];
+        c[(0,2)] = color[2];
+        c[(0,3)] = color[3];
+        c
     }
 }
 

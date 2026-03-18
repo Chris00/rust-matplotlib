@@ -8,6 +8,7 @@ static BASE: &'static str = "target/plot_types_";
 fn main() -> anyhow::Result<()> {
     // Pairwise data
     plot_xy()?;
+    scatter_xy()?;
     Ok(())
 }
 
@@ -32,5 +33,32 @@ fn plot_xy() -> anyhow::Result<()> {
         .set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
 
     fig.save().to_file(format!("{BASE}plot_xy.pdf"))?;
+    Ok(())
+}
+
+fn scatter_xy() -> anyhow::Result<()> {
+    use rand::RngExt;
+    use rand_distr::{Normal, Distribution};
+    mpl::style::using("_mpl-gallery")?;
+
+    fn vec<T>(mut f: impl FnMut() -> T) -> Vec<T> {
+        (0..24).map(|_| f()).collect()
+    }
+
+    let mut rng = rand::rng();
+    let n = Normal::new(0., 2.)?;
+    let x = vec(|| 4. + n.sample(&mut rng));
+    let y = vec(|| 4. + n.sample(&mut rng));
+    let sizes = vec(|| rng.random_range(15. .. 80.));
+    let colors = vec(|| rng.random_range(15 .. 80));
+
+    let fig = Figure::new()?;
+    let [[mut ax]] = fig.subplots()?;
+
+    ax.scatter(&x, &y).s(&sizes).cm(&colors).vmin(0.).vmax(100.).plot();
+
+    ax.set_xlim(0., 8.)   .set_xticks((1..8).map(f64::from))
+        .set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    fig.save().to_file(format!("{BASE}scatter_xy.pdf"))?;
     Ok(())
 }
