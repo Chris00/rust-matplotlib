@@ -231,6 +231,22 @@ impl Axes {
         Bar::new(self, x, height)
     }
 
+    /// Create a stem plot.
+    ///
+    /// A stem plot draws lines perpendicular to a baseline at each
+    /// location locs from the baseline to heads, and places a marker
+    /// there.  For vertical stem plots (the default), the locs are
+    /// `x` positions, and the heads are `y` values.  For horizontal
+    /// stem plots, the locs are `y` positions, and the heads are `x`
+    /// values.
+    pub fn stem<'a, D1, D2>(&'a mut self, x: D1, y: D2) -> Stem<'a>
+    where
+        D1: AsRef<[f64]> + 'a,
+        D2: AsRef<[f64]> + 'a,
+    {
+        Stem::new(self, x, y)
+    }
+
     /// Set the title to `txt` for the Axes.
     pub fn set_title(&mut self, txt: impl AsRef<str>) -> &mut Self {
         meth!(self.ax, set_title, (txt.as_ref(),)).unwrap();
@@ -960,6 +976,63 @@ impl<'a> Bar<'a> {
             self.axes.ax.bind(py)
                 .call_method(intern!(py, "bar"),
                     (x, height, self.width, self.bottom),
+                    Some(&kwargs))
+                .unwrap();
+        })
+    }
+}
+
+pub struct Stem<'a> {
+    axes: &'a Axes,
+    x: Box<dyn AsRef<[f64]> + 'a>,
+    y: Box<dyn AsRef<[f64]> + 'a>,
+    linefmt: &'a str, // FIXME: enum
+    markerfmt: &'a str,
+    basefmt: &'a str,
+}
+
+impl<'a> Stem<'a> {
+    fn new<D1, D2>(axes: &'a Axes, x: D1, y: D2) -> Self
+    where
+        D1: AsRef<[f64]> + 'a,
+        D2: AsRef<[f64]> + 'a,
+    {
+        Self {
+            axes,
+            x: Box::new(x),
+            y: Box::new(y),
+            linefmt: "C0-",
+            markerfmt: "o",
+            basefmt: "C3-",
+        }
+    }
+
+    pub fn linefmt(mut self, fmt: &'a str) -> Self {
+        self.linefmt = fmt;
+        self
+    }
+
+    pub fn markerfmt(mut self, fmt: &'a str) -> Self {
+        self.markerfmt = fmt;
+        self
+    }
+
+    pub fn basefmt(mut self, fmt: &'a str) -> Self {
+        self.basefmt = fmt;
+        self
+    }
+
+    pub fn plot(self) {
+        Python::attach(|py| {
+            let x = self.x.as_ref().as_ref().to_pyarray(py);
+            let y = self.y.as_ref().as_ref().to_pyarray(py);
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("linefmt", self.linefmt).unwrap();
+            kwargs.set_item("markerfmt", self.markerfmt).unwrap();
+            kwargs.set_item("basefmt", self.basefmt).unwrap();
+            self.axes.ax.bind(py)
+                .call_method(intern!(py, "stem"),
+                    (x, y),
                     Some(&kwargs))
                 .unwrap();
         })

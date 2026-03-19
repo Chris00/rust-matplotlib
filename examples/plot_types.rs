@@ -11,6 +11,7 @@ fn main() -> anyhow::Result<()> {
     plot_xy()?;
     scatter_xy()?;
     bar()?;
+    stem()?;
     Ok(())
 }
 
@@ -79,5 +80,22 @@ fn bar() -> anyhow::Result<()> {
     ax.set_xlim(0., 8.)   .set_xticks(Array1::range(1., 8., 1.))
         .set_ylim(0., 8.) .set_yticks(Array1::range(1., 8., 1.));
     fig.save().to_file(format!("{BASE}bar.pdf"))?;
+    Ok(())
+}
+
+fn stem() -> anyhow::Result<()> {
+    mpl::style::using("_mpl-gallery")?;
+
+    let x = Array1::range(0.5, 8.5, 1.);
+    let y = [4.8, 5.5, 3.5, 4.6, 6.5, 6.6, 2.6, 3.0];
+
+    let fig = Figure::new()?;
+    let [[mut ax]] = fig.subplots()?;
+
+    ax.stem(x.as_slice().unwrap(), &y).plot();
+
+    ax.set_xlim(0., 8.)   .set_xticks(Array1::range(1., 8., 1.))
+        .set_ylim(0., 8.) .set_yticks(Array1::range(1., 8., 1.));
+    fig.save().to_file(format!("{BASE}stem.pdf"))?;
     Ok(())
 }
