@@ -9,7 +9,7 @@ use crate::{
     lines::Line2D,
     text::Text,
 };
-use numpy::convert::ToPyArray;
+use numpy::{Ix1, convert::ToPyArray};
 use pyo3::{
     intern,
     prelude::*,
@@ -29,6 +29,11 @@ include!("macros.rs");
 pub struct Axes {
     pub(crate) ax: Py<PyAny>,
 }
+
+/// Alias for types convertible to one-dimensional Python arrays.
+pub trait Vector<T>: ToPyArray<Item=T, Dim=Ix1> {}
+
+impl<T, X> Vector<T> for X where X: ToPyArray<Item=T, Dim=Ix1> {}
 
 /// An Axes struct encapsulates all the elements of an individual
 /// (sub-)plot in a figure.
@@ -245,6 +250,15 @@ impl Axes {
         D2: AsRef<[f64]> + 'a,
     {
         Stem::new(self, x, y)
+    }
+
+    pub fn fill_between<'a>(
+        &'a mut self,
+        x: &'a impl Vector<f64>,
+        y1: &'a impl Vector<f64>,
+        y2: &'a impl Vector<f64>,
+    ) -> FillBetween<'a> {
+        FillBetween::new(self, x, y1, y2)
     }
 
     /// Set the title to `txt` for the Axes.
@@ -1033,6 +1047,89 @@ impl<'a> Stem<'a> {
             self.axes.ax.bind(py)
                 .call_method(intern!(py, "stem"),
                     (x, y),
+                    Some(&kwargs))
+                .unwrap();
+        })
+    }
+}
+
+pub struct FillBetween<'a> {
+    axes: &'a Axes,
+    x: &'a dyn Vector<f64>,
+    y1: &'a dyn Vector<f64>,
+    y2: &'a dyn Vector<f64>,
+    where_: Option<&'a [bool]>,
+    interpolate: bool,
+    step: Option<Step>,
+    // Options.  TODO: may other — and share with FillBetweenPolyCollection
+    alpha: Option<f64>, // or array
+    linewidth: Option<f64>,
+}
+
+/// Possible values for [`FillBetween::step`].
+#[derive(Debug, Clone, Copy)]
+pub enum Step {
+    Pre,
+    Post,
+    Mid,
+}
+
+impl Step {
+    fn as_str(self) -> &'static str {
+        match self {
+            Step::Pre => "pre",
+            Step::Post => "post",
+            Step::Mid => "mid",
+        }
+    }
+}
+
+impl<'a> FillBetween<'a> {
+    fn new<D0, D1, D2>(axes: &'a Axes, x: &'a D0, y1: &'a D1, y2: &'a D2) -> Self
+    where
+        D0: Vector<f64> + 'a,
+        D1: Vector<f64> + 'a,
+        D2: Vector<f64> + 'a,
+    {
+        Self {
+            axes,
+            x,
+            y1, // or f64
+            y2, // or f64
+            where_: None,
+            interpolate: false,
+            step: None,
+            alpha: None,
+            linewidth: None,
+        }
+    }
+
+    pub fn alpha(mut self, a: f64) -> Self {
+        self.alpha = Some(a);
+        self
+    }
+
+    pub fn linewidth(mut self, lw: f64) -> Self {
+        self.linewidth = Some(lw);
+        self
+    }
+
+    pub fn plot(self) {
+        Python::attach(|py| {
+            let x = self.x.to_pyarray(py);
+            let y1 = self.y1.to_pyarray(py);
+            let y2 = self.y2.to_pyarray(py);
+            let step = self.step.map(Step::as_str);
+            let kwargs = PyDict::new(py);
+            if let Some(alpha) = self.alpha {
+                kwargs.set_item("alpha", alpha).unwrap();
+            }
+            if let Some(lw) = self.linewidth {
+                kwargs.set_item("linewidth", lw).unwrap();
+            }
+            self.axes.ax.bind(py)
+                .call_method(intern!(py, "fill_between"),
+                    (x, y1, y2, self.where_, self.interpolate, step),
                     Some(&kwargs))
                 .unwrap();
         })
