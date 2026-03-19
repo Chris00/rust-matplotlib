@@ -211,11 +211,24 @@ impl Axes {
 
     /// Scatter plot of `y` vs. `x` with optional varying marker size
     /// and/or color.
-    pub fn scatter<'a, D>(&'a mut self, x: D, y: D) -> Scatter<'a, D>
+    pub fn scatter<'a, D>(&'a mut self, x: D, height: D) -> Scatter<'a, D>
     where
         D: AsRef<[f64]>,
     {
-        Scatter::new(self, x, y)
+        Scatter::new(self, x, height)
+    }
+
+    /// Make a bar plot.
+    ///
+    /// The bars are positioned at `x` with the given
+    /// [alignment][`Bar::align`].  Their dimensions are given by
+    /// height and width. The vertical baseline is bottom (default 0).
+    pub fn bar<'a, D1, D2>(&'a mut self, x: D1, height: D2) -> Bar<'a>
+    where
+        D1: AsRef<[f64]> + 'a,
+        D2: AsRef<[f64]> + 'a,
+    {
+        Bar::new(self, x, height)
     }
 
     /// Set the title to `txt` for the Axes.
@@ -661,6 +674,7 @@ where
     }
 }
 
+/// Options for [`Axes::scatter`].
 #[must_use]
 pub struct Scatter<'a, D> {
     axes: &'a Axes,
@@ -702,7 +716,7 @@ where D: AsRef<[f64]> {
         self
     }
 
-    /// Specify the marker colors.
+    /// Specify the marker color(s).
     pub fn c<C>(mut self, colors: impl ScatterColors) -> Self
     where C: Color,
     {
@@ -824,6 +838,131 @@ impl<C: Color> ScatterColors for C {
         c[(0,2)] = color[2];
         c[(0,3)] = color[3];
         c
+    }
+}
+
+pub struct Bar<'a> {
+    axes: &'a Axes,
+    x: Box<dyn AsRef<[f64]> + 'a>, // FIXME: categorical data ?
+    height: Box<dyn AsRef<[f64]> + 'a>,
+    width: f64, // FIXME: or array
+    bottom: f64, // FIXME: or array
+    align: BarAlign,
+    // Options
+    color: Option<[f64; 4]>, // FIXME: or array
+    facecolor: Option<[f64; 4]>, // FIXME: or array
+    edgecolor: Option<[f64; 4]>, // FIXME: or array
+    linewidth: Option<f64>, // FIXME: or array
+    tick_label: Option<&'a str>, // FIXME: or array
+    label: Option<&'a str>, // FIXME: or array
+    //xerr,  yerr, ecolor, capsize, error_kw, log
+}
+
+/// Alignment of [`Axes::bar`].  See [`Bar::align`].
+#[derive(Debug, Clone, Copy)]
+pub enum BarAlign {
+    Center,
+    Edge,
+}
+
+impl<'a> Bar<'a> {
+    fn new<D1, D2>(axes: &'a Axes, x: D1, height: D2) -> Self
+    where
+        D1: AsRef<[f64]> + 'a,
+        D2: AsRef<[f64]> + 'a,
+    {
+        Self {
+            axes,
+            x: Box::new(x),
+            height: Box::new(height),
+            width: 0.8,
+            bottom: 0.,
+            align: BarAlign::Center,
+            color: None,  facecolor: None,  edgecolor: None,
+            linewidth: None,  tick_label: None,  label: None,
+        }
+    }
+
+    pub fn width(mut self, w: f64) -> Self {
+        self.width = w;
+        self
+    }
+
+    pub fn bottom(mut self, b: f64) -> Self {
+        self.bottom = b;
+        self
+    }
+
+    pub fn align(mut self, a: BarAlign) -> Self {
+        self.align = a;
+        self
+    }
+
+    pub fn color(mut self, c: impl Color) -> Self {
+        self.color = Some(c.rgba());
+        self
+    }
+
+    pub fn facecolor(mut self, c: impl Color) -> Self {
+        self.facecolor = Some(c.rgba());
+        self
+    }
+
+    pub fn edgecolor(mut self, c: impl Color) -> Self {
+        self.edgecolor = Some(c.rgba());
+        self
+    }
+
+    pub fn linewidth(mut self, w: f64) -> Self {
+        self.linewidth = Some(w);
+        self
+    }
+
+    pub fn tick_label(mut self, l: &'a str) -> Self {
+        self.tick_label = Some(l);
+        self
+    }
+
+    pub fn label(mut self, l: &'a str) -> Self {
+        self.label = Some(l);
+        self
+    }
+
+    pub fn plot(self) {
+        Python::attach(|py| {
+            let x = self.x.as_ref().as_ref().to_pyarray(py);
+            let height = self.height.as_ref().as_ref().to_pyarray(py);
+            let align = match self.align {
+                BarAlign::Center => "center",
+                BarAlign::Edge => "edge",
+            };
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("align", align).unwrap();
+            if let Some(color) = self.color {
+                kwargs.set_item("color", color).unwrap();
+            }
+            if let Some(facecolor) = self.facecolor {
+                kwargs.set_item("facecolor", facecolor).unwrap();
+            }
+            if let Some(edgecolor) = self.edgecolor {
+                kwargs.set_item("edgecolor", edgecolor).unwrap();
+            }
+            if let Some(lw) = self.linewidth {
+                kwargs.set_item("linewidth", lw).unwrap();
+            }
+            if let Some(tick_label) = self.tick_label {
+                kwargs.set_item("tick_label", tick_label).unwrap();
+            }
+            if let Some(label) = self.label {
+                kwargs.set_item("label", label).unwrap();
+            }
+            // TODO: options
+            self.axes.ax.bind(py)
+                .call_method(intern!(py, "bar"),
+                    (x, height, self.width, self.bottom),
+                    Some(&kwargs))
+                .unwrap();
+        })
     }
 }
 
