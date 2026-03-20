@@ -17,6 +17,7 @@ fn main() -> anyhow::Result<()> {
     stem()?;
     fill_between()?;
     stackplot()?;
+    stairs()?;
     Ok(())
 }
 
@@ -126,5 +127,18 @@ fn stackplot() -> anyhow::Result<()> {
     ax.set_xlim(0., 8.) .set_xticks((1..8).map(f64::from));
     ax.set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
     fig.save().to_file(format!("{BASE}stackplot.pdf"))?;
+    Ok(())
+}
+
+fn stairs() -> anyhow::Result<()> {
+    let y = [4.8, 5.5, 3.5, 4.6, 6.5, 6.6, 2.6, 3.0];
+
+    let (fig, [[mut ax]]) = figure::subplots()?;
+
+    ax.stairs(&y).linewidth(2.5).plot();
+
+    ax.set_xlim(0., 8.) .set_xticks((1..8).map(f64::from));
+    ax.set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    fig.save().to_file(format!("{BASE}stairs.pdf"))?;
     Ok(())
 }

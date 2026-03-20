@@ -290,6 +290,19 @@ impl Axes {
         Stack::new(self, x, y)
     }
 
+    /// Draw a stepwise constant function as a line or a filled plot.
+    ///
+    /// `values` is the function values between these steps.
+    /// Depending on [`fill`][Stairs::fill], the function is drawn
+    /// either as a continuous line with vertical segments at the
+    /// edges, or as a filled area.
+    pub fn stairs<'a>(
+        &'a mut self,
+        values: &'a impl Vector<f64>,
+    ) -> Stairs<'a> {
+        Stairs::new(self, values)
+    }
+
     /// Set the title to `txt` for the Axes.
     pub fn set_title(&mut self, txt: impl AsRef<str>) -> &mut Self {
         meth!(self.ax, set_title, (txt.as_ref(),)).unwrap();
@@ -1236,6 +1249,85 @@ impl<'a> Stack<'a> {
                 .call_method(intern!(py, "stackplot"),
                     (x, y),
                     None)
+                .unwrap();
+        })
+    }
+}
+
+pub struct Stairs<'a> {
+    axes: &'a Axes,
+    y: &'a dyn Vector<f64>,
+    edges: Option<&'a dyn Vector<f64>>,
+    orientation: Orientation,
+    fill: bool,
+    // FIXME: there are more optional arguments.
+    linewidth: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Orientation {
+    Horizontal,
+    Vertical,
+}
+
+impl Orientation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Orientation::Horizontal => "horizontal",
+            Orientation::Vertical => "vertical",
+        }
+    }
+}
+
+impl<'a> Stairs<'a> {
+    fn new(
+        axes: &'a Axes,
+        y: &'a impl Vector<f64>,
+    ) -> Self {
+        Self {
+            axes, y,
+            edges: None,
+            orientation: Orientation::Vertical,
+            fill: false,
+            linewidth: None,
+        }
+    }
+
+    /// Define the x-axis positions of the steps.
+    pub fn edges(mut self, x: &'a impl Vector<f64>) -> Self {
+        self.edges = Some(x);
+        self
+    }
+
+    pub fn orientation(mut self, o: Orientation) -> Self {
+        self.orientation = o;
+        self
+    }
+
+    pub fn fill(mut self) -> Self {
+        self.fill = true;
+        self
+    }
+
+    pub fn linewidth(mut self, lw: f64) -> Self {
+        self.linewidth = Some(lw);
+        self
+    }
+
+    pub fn plot(self) {
+        Python::attach(|py| {
+            let y = self.y.to_pyvector(py);
+            let edges = self.edges.map(|e| e.to_pyvector(py));
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("orientation", self.orientation.as_str()).unwrap();
+            kwargs.set_item("fill", self.fill).unwrap();
+            if let Some(lw) = self.linewidth {
+                kwargs.set_item("linewidth", lw).unwrap();
+            }
+            self.axes.ax.bind(py)
+                .call_method(intern!(py, "stairs"),
+                    (y, edges),
+                    Some(&kwargs))
                 .unwrap();
         })
     }
