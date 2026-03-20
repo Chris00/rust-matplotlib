@@ -8,6 +8,8 @@ use rand::RngExt;
 static BASE: &'static str = "target/plot_types_";
 
 fn main() -> anyhow::Result<()> {
+    mpl::style::using("_mpl-gallery")?;
+
     // Pairwise data
     plot_xy()?;
     scatter_xy()?;
@@ -22,8 +24,6 @@ fn plot_xy() -> anyhow::Result<()> {
     let f = |x: f64| 4. + (2. * x).sin();
     let x2: Vec<_> = (0..25).map(|i| 10. / 25. * i as f64).collect();
     let y2 = x2.iter().cloned().map(f);
-
-    mpl::style::using("_mpl-gallery")?;
 
     let fig = Figure::new()?;
     let [[mut ax]] = fig.subplots()?;
@@ -43,7 +43,6 @@ fn plot_xy() -> anyhow::Result<()> {
 
 fn scatter_xy() -> anyhow::Result<()> {
     use rand_distr::{Normal, Distribution};
-    mpl::style::using("_mpl-gallery")?;
 
     fn vec<T>(mut f: impl FnMut() -> T) -> Vec<T> {
         (0..24).map(|_| f()).collect()
@@ -68,8 +67,6 @@ fn scatter_xy() -> anyhow::Result<()> {
 }
 
 fn bar() -> anyhow::Result<()> {
-    mpl::style::using("_mpl-gallery")?;
-
     let x: Vec<_> = (0 .. 8).map(|x| 0.5 + x as f64).collect();
     let y = [4.8, 5.5, 3.5, 4.6, 6.5, 6.6, 2.6, 3.0];
 
@@ -85,8 +82,6 @@ fn bar() -> anyhow::Result<()> {
 }
 
 fn stem() -> anyhow::Result<()> {
-    mpl::style::using("_mpl-gallery")?;
-
     let x = Array1::range(0.5, 8.5, 1.);
     let y = [4.8, 5.5, 3.5, 4.6, 6.5, 6.6, 2.6, 3.0];
 
@@ -102,8 +97,6 @@ fn stem() -> anyhow::Result<()> {
 }
 
 fn fill_between() -> anyhow::Result<()> {
-    mpl::style::using("_mpl-gallery")?;
-
     let x = Array1::linspace(0., 8., 16);
     let mut rng = rand::rng();
     let y1 = x.map(|&x| 3. + 4. * x / 8. + rng.random_range(0. .. 0.5));
