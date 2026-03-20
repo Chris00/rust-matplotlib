@@ -16,6 +16,7 @@ fn main() -> anyhow::Result<()> {
     bar()?;
     stem()?;
     fill_between()?;
+    stackplot()?;
     Ok(())
 }
 
@@ -106,5 +107,24 @@ fn fill_between() -> anyhow::Result<()> {
     ax.set_xlim(0., 8.) .set_xticks((1..8).map(f64::from));
     ax.set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
     fig.save().to_file(format!("{BASE}fill_between.pdf"))?;
+    Ok(())
+}
+
+fn stackplot() -> anyhow::Result<()> {
+    use ndarray::{arr1, Axis, stack};
+
+    let x = Array1::range(0., 10., 2.);
+    let ay = arr1(&[1., 1.25, 2., 2.75, 3.]);
+    let by = arr1(&[1., 1., 1., 1., 1.]);
+    let cy = arr1(&[2., 1., 2., 1., 2.]);
+    let y = stack(Axis(0), &[ay.view(), by.view(), cy.view()]).unwrap();
+
+    let (fig, [[mut ax]]) = figure::subplots()?;
+
+    ax.stack(&x, &y).plot();
+
+    ax.set_xlim(0., 8.) .set_xticks((1..8).map(f64::from));
+    ax.set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    fig.save().to_file(format!("{BASE}stackplot.pdf"))?;
     Ok(())
 }

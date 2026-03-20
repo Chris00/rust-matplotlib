@@ -282,6 +282,14 @@ impl Axes {
         FillBetween::new(self, x, y1, y2)
     }
 
+    pub fn stack<'a>(
+        &'a mut self,
+        x: &'a impl Vector<f64>,
+        y: &'a ndarray::Array2<f64>,
+    ) -> Stack<'a> {
+        Stack::new(self, x, y)
+    }
+
     /// Set the title to `txt` for the Axes.
     pub fn set_title(&mut self, txt: impl AsRef<str>) -> &mut Self {
         meth!(self.ax, set_title, (txt.as_ref(),)).unwrap();
@@ -1199,6 +1207,35 @@ impl<'a> FillBetween<'a> {
                 .call_method(intern!(py, "fill_between"),
                     (x, y1, y2, self.where_, self.interpolate, step),
                     Some(&kwargs))
+                .unwrap();
+        })
+    }
+}
+
+pub struct Stack<'a> {
+    axes: &'a Axes,
+    x: &'a dyn Vector<f64>,
+    y: &'a Array2<f64>,
+    // FIXME: there are optional arguments.
+}
+
+impl<'a> Stack<'a> {
+    fn new(
+        axes: &'a Axes,
+        x: &'a impl Vector<f64>,
+        y: &'a Array2<f64>,
+    ) -> Self {
+        Self { axes, x, y }
+    }
+
+    pub fn plot(self) {
+        Python::attach(|py| {
+            let x = self.x.to_pyvector(py);
+            let y = self.y.to_pyarray(py);
+            self.axes.ax.bind(py)
+                .call_method(intern!(py, "stackplot"),
+                    (x, y),
+                    None)
                 .unwrap();
         })
     }
