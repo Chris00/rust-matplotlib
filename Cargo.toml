@@ -34,3 +34,6 @@ polars-core = { version = "0.53.0", features = ["fmt"] }
 anyhow = "1.0.102"
 rand = "0.10.0"
 rand_distr = "=0.6.0"
+
+[package.metadata.docs.rs]
+all-features = true
