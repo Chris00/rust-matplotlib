@@ -13,6 +13,7 @@ categories = ["science", "visualization", "mathematics", "graphics"]
 rust-version = "1.85"
 
 [dependencies]
+nalgebra = { version = ">=0.30, <0.35", default-features = false, optional = true }
 numpy = "0.28.0"
 #numpy = { version = "0.28", git = "https://github.com/Chris00/rust-numpy.git" }
 ndarray = "0.17.2"
@@ -25,6 +26,7 @@ features = ["auto-initialize"]
 
 [features]
 default = ["curve-sampling"]
+nalgebra = ["dep:nalgebra", "numpy/nalgebra"]
 
 [dev-dependencies]
 doc-comment = "0.3.4"

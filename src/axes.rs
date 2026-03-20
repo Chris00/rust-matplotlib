@@ -56,6 +56,34 @@ impl<T: Element> Vector<T> for Array1<T>
     }
 }
 
+#[cfg(feature = "nalgebra")]
+impl<T, R, S> Vector<T> for nalgebra::Vector<T, R, S>
+where
+    T: nalgebra::Scalar + Element,
+    R: nalgebra::Dim,
+    S: nalgebra::Storage<T, R, nalgebra::base::dimension::U1>,
+{
+    fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
+        // Based on `numpy::convert::ToPyArray` impl for `nalgebra::Matrix`
+        // but returning a one-dimensional array.
+        use numpy::PyArrayMethods;
+        unsafe {
+            let vec = PyArray1::<T>::new(py, (self.len(),), true);
+            let mut data_ptr = vec.data();
+            if self.data.is_contiguous() {
+                std::ptr::copy_nonoverlapping(self.data.ptr(), data_ptr, self.len());
+            } else {
+                for item in self.iter() {
+                    data_ptr.write(item.clone_ref(py));
+                    data_ptr = data_ptr.add(1);
+                }
+            }
+            vec
+
+        }
+    }
+}
+
 impl<T: Element> Vector<T> for Vec<T>
 {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
