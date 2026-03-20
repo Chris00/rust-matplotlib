@@ -37,11 +37,6 @@ pub trait Vector<T: Element> {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T>;
 }
 
-// We can't use
-// impl<T: Element, X> Vector<T> for X where X: ToPyArray<Item=T, Dim=Ix1>
-// because the Rust compiler detects a potential conflict with the
-// upstream crate adding a new type as `ToPyArray`.
-
 impl<T: Element> Vector<T> for [T]
 {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
@@ -97,13 +92,6 @@ impl<T: Element, const N: usize> Vector<T> for [T; N]
         PyArray1::from_slice(py, self)
     }
 }
-
-// If https://github.com/PyO3/rust-numpy/pull/538 is approved, we can
-// make this trait a simple alias of the `ToPyArray` one.
-//
-// pub trait Vector<T>: ToPyArray<Item=T, Dim=Ix1> {}
-//
-// impl<T, X> Vector<T> for X where X: ToPyArray<Item=T, Dim=Ix1> {}
 
 /// An Axes struct encapsulates all the elements of an individual
 /// (sub-)plot in a figure.
