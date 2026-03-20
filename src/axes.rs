@@ -9,13 +9,13 @@ use crate::{
     lines::Line2D,
     text::Text,
 };
-use numpy::{Ix1, convert::ToPyArray};
+use numpy::{Element, PyArray1, convert::ToPyArray};
 use pyo3::{
     intern,
     prelude::*,
     types::{PyDict, PyList, PyTuple},
 };
-use ndarray::Array2;
+use ndarray::{Array1, Array2};
 use std::marker::PhantomData;
 
 #[cfg(feature = "curve-sampling")]
@@ -30,10 +30,52 @@ pub struct Axes {
     pub(crate) ax: Py<PyAny>,
 }
 
-/// Alias for types convertible to one-dimensional Python arrays.
-pub trait Vector<T>: ToPyArray<Item=T, Dim=Ix1> {}
+pub type PyVector<'py, T> = Bound<'py, PyArray1<T>>;
 
-impl<T, X> Vector<T> for X where X: ToPyArray<Item=T, Dim=Ix1> {}
+/// Types convertible to one-dimensional Python arrays.
+pub trait Vector<T: Element> {
+    fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T>;
+}
+
+// We can't use
+// impl<T: Element, X> Vector<T> for X where X: ToPyArray<Item=T, Dim=Ix1>
+// because the Rust compiler detects a potential conflict with the
+// upstream crate adding a new type as `ToPyArray`.
+
+impl<T: Element> Vector<T> for [T]
+{
+    fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
+        PyArray1::from_slice(py, self)
+    }
+}
+
+impl<T: Element> Vector<T> for Array1<T>
+{
+    fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
+        <Self as ToPyArray>::to_pyarray(&self, py)
+    }
+}
+
+impl<T: Element> Vector<T> for Vec<T>
+{
+    fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
+        PyArray1::from_slice(py, self)
+    }
+}
+
+impl<T: Element, const N: usize> Vector<T> for [T; N]
+{
+    fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
+        PyArray1::from_slice(py, self)
+    }
+}
+
+// If https://github.com/PyO3/rust-numpy/pull/538 is approved, we can
+// make this trait a simple alias of the `ToPyArray` one.
+//
+// pub trait Vector<T>: ToPyArray<Item=T, Dim=Ix1> {}
+//
+// impl<T, X> Vector<T> for X where X: ToPyArray<Item=T, Dim=Ix1> {}
 
 /// An Axes struct encapsulates all the elements of an individual
 /// (sub-)plot in a figure.
@@ -54,19 +96,16 @@ impl Axes {
     /// ```
     // FIXME: Do we want to check that `x` and `y` have the same
     // dimension?  Better error message?
-    pub fn xy<'a, D>(&'a mut self, x: D, y: D) -> XY<'a, D>
-    where
-        D: AsRef<[f64]>,
-    {
+    pub fn xy<'a>(
+        &'a mut self,
+        x: &'a impl Vector<f64>,
+        y: &'a impl Vector<f64>
+    ) -> XY<'a> {
         // The chain leading to plot starts with the data (using this
         // function) so that additional data may be added, sharing
         // common options.  We also mutably borrow `self` to reflect that
         // the final `.plot()` will mutate the underlying Python object.
-        XY {
-            axes: self,
-            options: PlotOptions::new(),
-            data: PlotData::XY(x, y),
-        }
+        XY::xy(self, x, y)
     }
 
     /// Plot `y` versus its indices as lines and/or markers.
@@ -80,15 +119,8 @@ impl Axes {
     /// fig.save().to_file("target/Y_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    pub fn y<'a, D>(&'a mut self, y: D) -> XY<'a, D>
-    where
-        D: AsRef<[f64]>,
-    {
-        XY {
-            axes: self,
-            options: PlotOptions::new(),
-            data: PlotData::Y(y),
-        }
+    pub fn y<'a>(&'a mut self, y: &'a impl Vector<f64>) -> XY<'a> {
+        XY::y(self, y)
     }
 
     /// Convenience function to plot X-Y coordinates coming from `xy`.
@@ -110,11 +142,7 @@ impl Axes {
         I: IntoIterator,
         <I as IntoIterator>::Item: CoordXY,
     {
-        XYFrom {
-            axes: self,
-            options: PlotOptions::new(),
-            data: xy,
-        }
+        XYFrom::new(self, xy)
     }
 
     #[cfg(feature = "curve-sampling")]
@@ -133,15 +161,7 @@ impl Axes {
         F: FnMut(f64) -> Y,
         Y: curve_sampling::Img<D>,
     {
-        Fun {
-            axes: self,
-            options: PlotOptions::new(),
-            f,
-            data: PhantomData,
-            a,
-            b,
-            n: 100,
-        }
+        Fun::new(self, f, a, b)
     }
 
     /// Draw the contour lines for the data `z[j,i]` as points
@@ -161,26 +181,20 @@ impl Axes {
     ///     }
     /// }
     /// let (fig, [[mut ax]]) = plt::subplots()?;
-    /// ax.contour(x.as_slice().unwrap(), y.as_slice().unwrap(), &z)
+    /// ax.contour(&x, &y, &z)
     ///     .levels(&[0.2, 0.5, 0.8])
     ///     .colors(&[Tab::Red, Tab::Blue, Tab::Olive])
     ///     .plot();
     /// fig.save().to_file("target/contour.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    pub fn contour<'a, D>(&'a mut self, x: D, y: D, z: &'a ndarray::Array2<f64>) -> Contour<'a, D>
-    where
-        D: AsRef<[f64]>,
-    {
-        Contour {
-            axes: self,
-            options: PlotOptions::new(),
-            x,
-            y,
-            z,
-            levels: None,
-            colors: None,
-        }
+    pub fn contour<'a>(
+        &'a mut self,
+        x: &'a impl Vector<f64>,
+        y: &'a impl Vector<f64>,
+        z: &'a ndarray::Array2<f64>
+    ) -> Contour<'a> {
+        Contour::new(self, x, y, z)
     }
 
     /// Draw the contour lines for function `f` in the rectangle `ab`×`cd`.
@@ -201,25 +215,16 @@ impl Axes {
     where
         F: FnMut(f64, f64) -> f64,
     {
-        ContourFun {
-            axes: self,
-            options: PlotOptions::new(),
-            f,
-            ab,
-            cd,
-            n1: 100,
-            n2: 100,
-            levels: None,
-            colors: None,
-        }
+        ContourFun::new(self, ab, cd, f)
     }
 
     /// Scatter plot of `y` vs. `x` with optional varying marker size
     /// and/or color.
-    pub fn scatter<'a, D>(&'a mut self, x: D, height: D) -> Scatter<'a, D>
-    where
-        D: AsRef<[f64]>,
-    {
+    pub fn scatter<'a>(
+        &'a mut self,
+        x: &'a impl Vector<f64>,
+        height: &'a impl Vector<f64>,
+    ) -> Scatter<'a> {
         Scatter::new(self, x, height)
     }
 
@@ -228,11 +233,11 @@ impl Axes {
     /// The bars are positioned at `x` with the given
     /// [alignment][`Bar::align`].  Their dimensions are given by
     /// height and width. The vertical baseline is bottom (default 0).
-    pub fn bar<'a, D1, D2>(&'a mut self, x: D1, height: D2) -> Bar<'a>
-    where
-        D1: AsRef<[f64]> + 'a,
-        D2: AsRef<[f64]> + 'a,
-    {
+    pub fn bar<'a>(
+        &'a mut self,
+        x: &'a impl Vector<f64>,
+        height: &'a impl Vector<f64>,
+    ) -> Bar<'a> {
         Bar::new(self, x, height)
     }
 
@@ -244,11 +249,11 @@ impl Axes {
     /// `x` positions, and the heads are `y` values.  For horizontal
     /// stem plots, the locs are `y` positions, and the heads are `x`
     /// values.
-    pub fn stem<'a, D1, D2>(&'a mut self, x: D1, y: D2) -> Stem<'a>
-    where
-        D1: AsRef<[f64]> + 'a,
-        D2: AsRef<[f64]> + 'a,
-    {
+    pub fn stem<'a>(
+        &'a mut self,
+        x: &'a impl Vector<f64>,
+        y: &'a impl Vector<f64>,
+    ) -> Stem<'a> {
         Stem::new(self, x, y)
     }
 
@@ -390,9 +395,9 @@ impl Axes {
     }
 }
 
-enum PlotData<D> {
-    XY(D, D),
-    Y(D),
+enum PlotData<'a> {
+    XY(&'a dyn Vector<f64>, &'a dyn Vector<f64>),
+    Y(&'a dyn Vector<f64>),
 }
 
 #[derive(Clone)]
@@ -453,9 +458,13 @@ impl<'a> PlotOptions<'a> {
     }
 
     /// Plot the ndarrays `x` and `y` and return the corresponding line.
-    fn plot_xy(&self, py: Python<'_>, axes: &Axes, x: &[f64], y: &[f64]) -> Line2D {
-        let x = x.to_pyarray(py);
-        let y = y.to_pyarray(py);
+    fn plot_xy(
+        &self,
+        py: Python<'_>,
+        axes: &Axes,
+        x: PyVector<f64>,
+        y: PyVector<f64>,
+    ) -> Line2D {
         let lines = axes
             .ax
             .call_method(py, "plot", (x, y, self.fmt), Some(&self.kwargs(py)))
@@ -466,8 +475,7 @@ impl<'a> PlotOptions<'a> {
         Line2D { line2d }
     }
 
-    fn plot_y(&self, py: Python<'_>, axes: &Axes, y: &[f64]) -> Line2D {
-        let y = y.to_pyarray(py);
+    fn plot_y(&self, py: Python<'_>, axes: &Axes, y: PyVector<f64>) -> Line2D {
         let lines = axes
             .ax
             .call_method(py, "plot", (y, self.fmt), Some(&self.kwargs(py)))
@@ -477,15 +485,19 @@ impl<'a> PlotOptions<'a> {
         Line2D { line2d }
     }
 
-    fn plot_data<D: AsRef<[f64]>>(
+    fn plot_data(
         &self,
         py: Python<'_>,
         axes: &Axes,
-        data: &PlotData<D>,
+        data: PlotData<'a>,
     ) -> Line2D {
         match data {
-            PlotData::XY(x, y) => self.plot_xy(py, axes, x.as_ref(), y.as_ref()),
-            PlotData::Y(y) => self.plot_y(py, axes, y.as_ref()),
+            PlotData::XY(x, y) => {
+                self.plot_xy(py, axes, x.to_pyvector(py), y.to_pyvector(py))
+            }
+            PlotData::Y(y) => {
+                self.plot_y(py, axes, y.to_pyvector(py))
+            }
         }
     }
 }
@@ -550,21 +562,34 @@ macro_rules! set_plotoptions {
 
 /// Options to plot X-Y data.  Created by [`Axes::xy`] and [`Axes::y`].
 #[must_use]
-pub struct XY<'a, D> {
+pub struct XY<'a> {
     axes: &'a Axes,
+    data: PlotData<'a>,
     options: PlotOptions<'a>,
-    data: PlotData<D>,
 }
 
-impl<'a, D> XY<'a, D>
-where
-    D: AsRef<[f64]>,
-{
+impl<'a> XY<'a>  {
+    fn xy(axes: &'a Axes, x: &'a impl Vector<f64>, y: &'a impl Vector<f64>) -> Self {
+        Self {
+            axes,
+            options: PlotOptions::new(),
+            data: PlotData::XY(x, y),
+        }
+    }
+
+    fn y(axes: &'a Axes, y: &'a impl Vector<f64>) -> Self {
+        Self {
+            axes,
+            options: PlotOptions::new(),
+            data: PlotData::Y(y),
+        }
+    }
+
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XY`].
     pub fn plot(self) -> Line2D {
-        Python::attach(|py| self.options.plot_data(py, self.axes, &self.data))
+        Python::attach(|py| self.options.plot_data(py, self.axes, self.data))
     }
 }
 
@@ -572,8 +597,8 @@ where
 #[must_use]
 pub struct XYFrom<'a, I> {
     axes: &'a Axes,
-    options: PlotOptions<'a>,
     data: I,
+    options: PlotOptions<'a>,
 }
 
 pub trait CoordXY {
@@ -645,6 +670,10 @@ where
     I: IntoIterator,
     <I as IntoIterator>::Item: CoordXY,
 {
+    fn new(axes: &'a Axes, xy: I) -> Self {
+        Self { axes, options: PlotOptions::new(), data: xy }
+    }
+
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XYFrom`].
@@ -657,7 +686,11 @@ where
             x.push(di.x());
             y.push(di.y());
         }
-        Python::attach(|py| self.options.plot_xy(py, self.axes, &x, &y))
+        Python::attach(|py| {
+            let x = x.to_pyarray(py);
+            let y = y.to_pyarray(py);
+            self.options.plot_xy(py, self.axes, x, y)
+        })
     }
 }
 
@@ -682,6 +715,13 @@ where
     F: FnMut(f64) -> Y,
     Y: curve_sampling::Img<D>,
 {
+    fn new(axes: &'a Axes, f: F, a: f64, b: f64) -> Self {
+        Self {
+            axes, options: PlotOptions::new(), f, data: PhantomData,
+            a, b, n: 100,
+        }
+    }
+
     set_plotoptions!();
 
     /// Plot the data with the options specified in [`XY`].
@@ -690,7 +730,11 @@ where
         // Ensure `x` and `y` live to the end of the call to "plot".
         let x = s.x();
         let y = s.y();
-        Python::attach(|py| self.options.plot_xy(py, self.axes, &x, &y))
+        Python::attach(|py| {
+            let x = x.to_pyarray(py);
+            let y = y.to_pyarray(py);
+            self.options.plot_xy(py, self.axes, x, y)
+        })
     }
 
     /// Set the maximum number of evaluations of the function to build
@@ -706,10 +750,10 @@ where
 
 /// Options for [`Axes::scatter`].
 #[must_use]
-pub struct Scatter<'a, D> {
+pub struct Scatter<'a> {
     axes: &'a Axes,
-    x: D,
-    y: D,
+    x: &'a dyn Vector<f64>,
+    y: &'a dyn Vector<f64>,
     // Optional arguments are different from other plot types.
     s: Option<&'a [f64]>,
     c: Option<ScatterColorMat<'a>>, // Slice of RGBA
@@ -728,9 +772,12 @@ pub struct Scatter<'a, D> {
     // plotnonfinite
 }
 
-impl<'a, D> Scatter<'a, D>
-where D: AsRef<[f64]> {
-    fn new(axes: &'a Axes, x: D, y: D) -> Self {
+impl<'a> Scatter<'a> {
+    fn new(
+        axes: &'a Axes,
+        x: &'a dyn Vector<f64>,
+        y: &'a dyn Vector<f64>
+    ) -> Self {
         Self {
             axes, x, y,
             s: None, c: None, marker: None, cmap: None, norm: None,
@@ -819,8 +866,8 @@ where D: AsRef<[f64]> {
         py: Python<'py>,
         c: impl IntoPyObject<'py>,
     ) {
-        let xn = self.x.as_ref().to_pyarray(py);
-        let yn = self.y.as_ref().to_pyarray(py);
+        let xn = self.x.to_pyvector(py);
+        let yn = self.y.to_pyvector(py);
         self.axes.ax.call_method1(py, intern!(py, "scatter"),
             (xn, yn, self.s, c, self.marker, self.cmap,
                  self.norm, self.vmin, self.vmax, self.alpha,
@@ -873,8 +920,8 @@ impl<C: Color> ScatterColors for C {
 
 pub struct Bar<'a> {
     axes: &'a Axes,
-    x: Box<dyn AsRef<[f64]> + 'a>, // FIXME: categorical data ?
-    height: Box<dyn AsRef<[f64]> + 'a>,
+    x: &'a dyn Vector<f64>, // FIXME: categorical data ?
+    height: &'a dyn Vector<f64>,
     width: f64, // FIXME: or array
     bottom: f64, // FIXME: or array
     align: BarAlign,
@@ -896,15 +943,15 @@ pub enum BarAlign {
 }
 
 impl<'a> Bar<'a> {
-    fn new<D1, D2>(axes: &'a Axes, x: D1, height: D2) -> Self
-    where
-        D1: AsRef<[f64]> + 'a,
-        D2: AsRef<[f64]> + 'a,
-    {
+    fn new(
+        axes: &'a Axes,
+        x: &'a impl Vector<f64>,
+        height: &'a impl Vector<f64>,
+    ) -> Self {
         Self {
             axes,
-            x: Box::new(x),
-            height: Box::new(height),
+            x: x,
+            height: height,
             width: 0.8,
             bottom: 0.,
             align: BarAlign::Center,
@@ -960,8 +1007,8 @@ impl<'a> Bar<'a> {
 
     pub fn plot(self) {
         Python::attach(|py| {
-            let x = self.x.as_ref().as_ref().to_pyarray(py);
-            let height = self.height.as_ref().as_ref().to_pyarray(py);
+            let x = self.x.to_pyvector(py);
+            let height = self.height.to_pyvector(py);
             let align = match self.align {
                 BarAlign::Center => "center",
                 BarAlign::Edge => "edge",
@@ -998,23 +1045,21 @@ impl<'a> Bar<'a> {
 
 pub struct Stem<'a> {
     axes: &'a Axes,
-    x: Box<dyn AsRef<[f64]> + 'a>,
-    y: Box<dyn AsRef<[f64]> + 'a>,
+    x: &'a dyn Vector<f64>,
+    y: &'a dyn Vector<f64>,
     linefmt: &'a str, // FIXME: enum
     markerfmt: &'a str,
     basefmt: &'a str,
 }
 
 impl<'a> Stem<'a> {
-    fn new<D1, D2>(axes: &'a Axes, x: D1, y: D2) -> Self
-    where
-        D1: AsRef<[f64]> + 'a,
-        D2: AsRef<[f64]> + 'a,
-    {
+    fn new<>(
+        axes: &'a Axes,
+        x: &'a impl Vector<f64>,
+        y: &'a impl Vector<f64>,
+    ) -> Self {
         Self {
-            axes,
-            x: Box::new(x),
-            y: Box::new(y),
+            axes, x, y,
             linefmt: "C0-",
             markerfmt: "o",
             basefmt: "C3-",
@@ -1038,8 +1083,8 @@ impl<'a> Stem<'a> {
 
     pub fn plot(self) {
         Python::attach(|py| {
-            let x = self.x.as_ref().as_ref().to_pyarray(py);
-            let y = self.y.as_ref().as_ref().to_pyarray(py);
+            let x = self.x.to_pyvector(py);
+            let y = self.y.to_pyvector(py);
             let kwargs = PyDict::new(py);
             kwargs.set_item("linefmt", self.linefmt).unwrap();
             kwargs.set_item("markerfmt", self.markerfmt).unwrap();
@@ -1116,9 +1161,9 @@ impl<'a> FillBetween<'a> {
 
     pub fn plot(self) {
         Python::attach(|py| {
-            let x = self.x.to_pyarray(py);
-            let y1 = self.y1.to_pyarray(py);
-            let y2 = self.y2.to_pyarray(py);
+            let x = self.x.to_pyvector(py);
+            let y1 = self.y1.to_pyvector(py);
+            let y2 = self.y2.to_pyvector(py);
             let step = self.step.map(Step::as_str);
             let kwargs = PyDict::new(py);
             if let Some(alpha) = self.alpha {
@@ -1196,27 +1241,37 @@ macro_rules! set_contour_options {
 }
 
 #[must_use]
-pub struct Contour<'a, D> {
+pub struct Contour<'a> {
     axes: &'a Axes,
     options: PlotOptions<'a>,
-    x: D,
-    y: D,
+    x: &'a dyn Vector<f64>,
+    y: &'a dyn Vector<f64>,
     z: &'a ndarray::Array2<f64>,
     levels: Option<&'a [f64]>,
     colors: Option<Vec<[f64; 4]>>,
 }
 
-impl<'a, D> Contour<'a, D>
-where
-    D: AsRef<[f64]>,
+impl<'a> Contour<'a>
 {
+    fn new(
+        axes: &'a Axes,
+        x: &'a impl Vector<f64>,
+        y: &'a impl Vector<f64>,
+        z: &'a ndarray::Array2<f64>,
+    ) -> Self {
+        Self {
+            axes, options: PlotOptions::new(),
+            x, y, z, levels: None, colors: None,
+        }
+    }
+
     set_plotoptions!();
     set_contour_options!();
 
     pub fn plot(&self) -> QuadContourSet {
         Python::attach(|py| {
-            let x = self.x.as_ref().to_pyarray(py);
-            let y = self.y.as_ref().to_pyarray(py);
+            let x = self.x.to_pyvector(py);
+            let y = self.y.to_pyvector(py);
             let z = self.z.to_pyarray(py);
             let mut opt = self.options.kwargs(py);
             self.update_dict(&mut opt);
@@ -1247,6 +1302,14 @@ impl<'a, F> ContourFun<'a, F>
 where
     F: FnMut(f64, f64) -> f64,
 {
+    fn new(axes: &'a Axes, ab: [f64; 2], cd: [f64; 2], f: F) -> Self {
+        Self {
+            axes, options: PlotOptions::new(),
+            f, ab, cd, n1: 100, n2: 100,
+            levels: None, colors: None,
+        }
+    }
+
     set_plotoptions!();
     set_contour_options!();
 

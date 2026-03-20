@@ -28,10 +28,10 @@ fn plot_xy() -> anyhow::Result<()> {
     let fig = Figure::new()?;
     let [[mut ax]] = fig.subplots()?;
 
-    let y2_above = y2.clone().map(|y| y + 2.5).collect();
+    let y2_above: Vec<_> = y2.clone().map(|y| y + 2.5).collect();
     ax.xy(&x2, &y2_above).fmt("x").markeredgewidth(2.).plot();
     ax.fun(f, 0., 10.).linewidth(2.).plot();
-    let y2_below = y2.map(|y| y - 2.5).collect();
+    let y2_below: Vec<_> = y2.map(|y| y - 2.5).collect();
     ax.xy(&x2, &y2_below).fmt("o-").linewidth(2.).plot();
 
     ax.set_xlim(0., 8.)   .set_xticks((1..8).map(f64::from))
@@ -93,10 +93,10 @@ fn stem() -> anyhow::Result<()> {
     let fig = Figure::new()?;
     let [[mut ax]] = fig.subplots()?;
 
-    ax.stem(x.as_slice().unwrap(), &y).plot();
+    ax.stem(&x, &y).plot();
 
-    ax.set_xlim(0., 8.)   .set_xticks(Array1::range(1., 8., 1.))
-        .set_ylim(0., 8.) .set_yticks(Array1::range(1., 8., 1.));
+    ax.set_xlim(0., 8.) .set_xticks(Array1::range(1., 8., 1.));
+    ax.set_ylim(0., 8.) .set_yticks(Array1::range(1., 8., 1.));
     fig.save().to_file(format!("{BASE}stem.pdf"))?;
     Ok(())
 }
@@ -113,10 +113,10 @@ fn fill_between() -> anyhow::Result<()> {
     let [[mut ax]] = fig.subplots()?;
 
     ax.fill_between(&x, &y1, &y2).alpha(0.5).plot();
-//    ax.xy(&x, y1 + y2).plot();
+    ax.xy(&x, &((y1 + y2) / 2.)).plot();
 
-    ax.set_xlim(0., 8.)   .set_xticks((1..8).map(f64::from))
-        .set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    ax.set_xlim(0., 8.) .set_xticks((1..8).map(f64::from));
+    ax.set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
     fig.save().to_file(format!("{BASE}fill_between.pdf"))?;
     Ok(())
 }
