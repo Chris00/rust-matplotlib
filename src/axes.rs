@@ -832,14 +832,16 @@ impl<'a> Scatter<'a> {
     }
 
     /// When using scalar data and no explicit `norm`, `vmin` and
-    /// [`vmax`] define the data range that the colormap covers.
+    /// [`vmax`][Scatter::vmax] define the data range that the
+    /// colormap covers.
     pub fn vmin(mut self, v: f64) -> Self {
         self.vmin = Some(v);
         self
     }
 
-    /// When using scalar data and no explicit `norm`, [`vmin`] and
-    /// `vmax` define the data range that the colormap covers.
+    /// When using scalar data and no explicit `norm`,
+    /// [`vmin`][Scatter::vmin] and `vmax` define the data range that
+    /// the colormap covers.
     pub fn vmax(mut self, v: f64) -> Self {
         self.vmax = Some(v);
         self
@@ -1163,6 +1165,11 @@ impl<'a> FillBetween<'a> {
             alpha: None,
             linewidth: None,
         }
+    }
+
+    pub fn step(mut self, s: Step) -> Self {
+        self.step = Some(s);
+        self
     }
 
     pub fn alpha(mut self, a: f64) -> Self {

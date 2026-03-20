@@ -5,9 +5,12 @@
 //! pyplot is mainly intended for interactive plots and simple cases
 //! of programmatic plot generation:
 //!
-//! ```
+//! ```no_run
 //! use matplotlib::pyplot as plt;
-//! 
+//! let (_, [[mut ax]]) = plt::subplots()?;
+//! ax.fun(f64::sin, 0., 5.).plot();
+//! plt::show();
+//! # Ok::<(), matplotlib::Error>(())
 //! ```
 
 use pyo3::{
