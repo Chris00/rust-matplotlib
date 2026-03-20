@@ -1,6 +1,6 @@
 /// Inspired from
 /// https://matplotlib.org/stable/plot_types/index.html#plot-types
-use matplotlib::{colors::Base, self as mpl, figure::Figure};
+use matplotlib::{colors::Base, self as mpl, figure};
 use ndarray::Array1;
 use rand::RngExt;
 
@@ -25,8 +25,7 @@ fn plot_xy() -> anyhow::Result<()> {
     let x2: Vec<_> = (0..25).map(|i| 10. / 25. * i as f64).collect();
     let y2 = x2.iter().cloned().map(f);
 
-    let fig = Figure::new()?;
-    let [[mut ax]] = fig.subplots()?;
+    let (fig, [[mut ax]]) = figure::subplots()?;
 
     let y2_above: Vec<_> = y2.clone().map(|y| y + 2.5).collect();
     ax.xy(&x2, &y2_above).fmt("x").markeredgewidth(2.).plot();
@@ -55,8 +54,7 @@ fn scatter_xy() -> anyhow::Result<()> {
     let sizes = vec(|| rng.random_range(15. .. 80.));
     let colors = vec(|| rng.random_range(15 .. 80));
 
-    let fig = Figure::new()?;
-    let [[mut ax]] = fig.subplots()?;
+    let (fig, [[mut ax]]) = figure::subplots()?;
 
     ax.scatter(&x, &y).s(&sizes).cm(&colors).vmin(0.).vmax(100.).plot();
 
@@ -70,8 +68,7 @@ fn bar() -> anyhow::Result<()> {
     let x: Vec<_> = (0 .. 8).map(|x| 0.5 + x as f64).collect();
     let y = [4.8, 5.5, 3.5, 4.6, 6.5, 6.6, 2.6, 3.0];
 
-    let fig = Figure::new()?;
-    let [[mut ax]] = fig.subplots()?;
+    let (fig, [[mut ax]]) = figure::subplots()?;
 
     ax.bar(&x, &y).width(1.).edgecolor(Base::W).linewidth(0.7).plot();
 
@@ -85,8 +82,7 @@ fn stem() -> anyhow::Result<()> {
     let x = Array1::range(0.5, 8.5, 1.);
     let y = [4.8, 5.5, 3.5, 4.6, 6.5, 6.6, 2.6, 3.0];
 
-    let fig = Figure::new()?;
-    let [[mut ax]] = fig.subplots()?;
+    let (fig, [[mut ax]]) = figure::subplots()?;
 
     ax.stem(&x, &y).plot();
 
@@ -102,8 +98,7 @@ fn fill_between() -> anyhow::Result<()> {
     let y1 = x.map(|&x| 3. + 4. * x / 8. + rng.random_range(0. .. 0.5));
     let y2 = x.map(|&x| 1. + 2. * x / 8. + rng.random_range(0. .. 0.5));
 
-    let fig = Figure::new()?;
-    let [[mut ax]] = fig.subplots()?;
+    let (fig, [[mut ax]]) = figure::subplots()?;
 
     ax.fill_between(&x, &y1, &y2).alpha(0.5).plot();
     ax.xy(&x, &((y1 + y2) / 2.)).plot();

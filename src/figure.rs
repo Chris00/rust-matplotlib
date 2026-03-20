@@ -18,6 +18,15 @@ pub struct Figure {
     pub(crate) fig: Py<PyAny>, // instance of matplotlib.figure.Figure
 }
 
+/// Convenience function returning a [`Figure`] and subplots (the
+/// number of which is determined by the size of the array).
+pub fn subplots<const R: usize, const C: usize>(
+) -> Result<(Figure, [[Axes; C]; R]), Error> {
+    let fig = Figure::new()?;
+    let sp = fig.subplots()?;
+    Ok((fig, sp))
+}
+
 #[inline(always)]
 fn grid<const R: usize, const C: usize, U>(f: impl Fn(usize, usize) -> U) -> [[U; C]; R] {
     let mut r = 0;
