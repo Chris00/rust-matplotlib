@@ -12,8 +12,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
     mpl::rc_params().set("axes.linewidth", 0.65)?;
     mpl::rc_params().set("lines.linewidth", 0.8)?;
-    let fig = plt::figure()?;
-    let [[mut ax]] = fig.subplots()?;
+    let (_, [[mut ax]]) = plt::subplots()?;
     ax.grid().set_xlabel("$x$");
     ax.xy_from(x.clone().zip(y1))
         .fmt("ob-")
