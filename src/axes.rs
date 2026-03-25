@@ -30,6 +30,7 @@ pub struct Axes {
     pub(crate) ax: Py<PyAny>,
 }
 
+/// Alias for one-dimensional bound-arrays in Python.
 pub type PyVector<'py, T> = Bound<'py, PyArray1<T>>;
 
 /// Types convertible to one-dimensional Python arrays.
@@ -114,8 +115,8 @@ impl Axes {
     // dimension?  Better error message?
     pub fn xy<'a>(
         &'a mut self,
-        x: &'a impl Vector<f64>,
-        y: &'a impl Vector<f64>
+        x: &'a (impl Vector<f64> + ?Sized),
+        y: &'a (impl Vector<f64> + ?Sized),
     ) -> XY<'a> {
         // The chain leading to plot starts with the data (using this
         // function) so that additional data may be added, sharing
@@ -135,7 +136,7 @@ impl Axes {
     /// fig.save().to_file("target/Y_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    pub fn y<'a>(&'a mut self, y: &'a impl Vector<f64>) -> XY<'a> {
+    pub fn y<'a>(&'a mut self, y: &'a (impl Vector<f64> + ?Sized)) -> XY<'a> {
         XY::y(self, y)
     }
 
@@ -206,8 +207,8 @@ impl Axes {
     /// ```
     pub fn contour<'a>(
         &'a mut self,
-        x: &'a impl Vector<f64>,
-        y: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
+        y: &'a (impl Vector<f64> + ?Sized),
         z: &'a ndarray::Array2<f64>
     ) -> Contour<'a> {
         Contour::new(self, x, y, z)
@@ -238,8 +239,8 @@ impl Axes {
     /// and/or color.
     pub fn scatter<'a>(
         &'a mut self,
-        x: &'a impl Vector<f64>,
-        height: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
+        height: &'a (impl Vector<f64> + ?Sized),
     ) -> Scatter<'a> {
         Scatter::new(self, x, height)
     }
@@ -251,8 +252,8 @@ impl Axes {
     /// height and width. The vertical baseline is bottom (default 0).
     pub fn bar<'a>(
         &'a mut self,
-        x: &'a impl Vector<f64>,
-        height: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
+        height: &'a (impl Vector<f64> + ?Sized),
     ) -> Bar<'a> {
         Bar::new(self, x, height)
     }
@@ -267,24 +268,24 @@ impl Axes {
     /// values.
     pub fn stem<'a>(
         &'a mut self,
-        x: &'a impl Vector<f64>,
-        y: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
+        y: &'a (impl Vector<f64> + ?Sized),
     ) -> Stem<'a> {
         Stem::new(self, x, y)
     }
 
     pub fn fill_between<'a>(
         &'a mut self,
-        x: &'a impl Vector<f64>,
-        y1: &'a impl Vector<f64>,
-        y2: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
+        y1: &'a (impl Vector<f64> + ?Sized),
+        y2: &'a (impl Vector<f64> + ?Sized),
     ) -> FillBetween<'a> {
         FillBetween::new(self, x, y1, y2)
     }
 
     pub fn stack<'a>(
         &'a mut self,
-        x: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
         y: &'a ndarray::Array2<f64>,
     ) -> Stack<'a> {
         Stack::new(self, x, y)
@@ -298,7 +299,7 @@ impl Axes {
     /// edges, or as a filled area.
     pub fn stairs<'a>(
         &'a mut self,
-        values: &'a impl Vector<f64>,
+        values: &'a (impl Vector<f64> + ?Sized),
     ) -> Stairs<'a> {
         Stairs::new(self, values)
     }
@@ -432,9 +433,9 @@ impl Axes {
     }
 }
 
-enum PlotData<'a> {
-    XY(&'a dyn Vector<f64>, &'a dyn Vector<f64>),
-    Y(&'a dyn Vector<f64>),
+enum PlotData {
+    XY(Py<PyArray1<f64>>, Py<PyArray1<f64>>),
+    Y(Py<PyArray1<f64>>),
 }
 
 #[derive(Clone)]
@@ -497,10 +498,10 @@ impl<'a> PlotOptions<'a> {
     /// Plot the ndarrays `x` and `y` and return the corresponding line.
     fn plot_xy(
         &self,
-        py: Python<'_>,
+        py: Python,
         axes: &Axes,
-        x: PyVector<f64>,
-        y: PyVector<f64>,
+        x: &PyVector<f64>,
+        y: &PyVector<f64>,
     ) -> Line2D {
         let lines = axes
             .ax
@@ -512,7 +513,7 @@ impl<'a> PlotOptions<'a> {
         Line2D { line2d }
     }
 
-    fn plot_y(&self, py: Python<'_>, axes: &Axes, y: PyVector<f64>) -> Line2D {
+    fn plot_y(&self, py: Python, axes: &Axes, y: &PyVector<f64>) -> Line2D {
         let lines = axes
             .ax
             .call_method(py, "plot", (y, self.fmt), Some(&self.kwargs(py)))
@@ -524,16 +525,16 @@ impl<'a> PlotOptions<'a> {
 
     fn plot_data(
         &self,
-        py: Python<'_>,
+        py: Python,
         axes: &Axes,
-        data: PlotData<'a>,
+        data: PlotData,
     ) -> Line2D {
         match data {
             PlotData::XY(x, y) => {
-                self.plot_xy(py, axes, x.to_pyvector(py), y.to_pyvector(py))
+                self.plot_xy(py, axes, x.bind(py), y.bind(py))
             }
             PlotData::Y(y) => {
-                self.plot_y(py, axes, y.to_pyvector(py))
+                self.plot_y(py, axes, y.bind(py))
             }
         }
     }
@@ -601,25 +602,36 @@ macro_rules! set_plotoptions {
 #[must_use]
 pub struct XY<'a> {
     axes: &'a Axes,
-    data: PlotData<'a>,
+    data: PlotData,
     options: PlotOptions<'a>,
 }
 
 impl<'a> XY<'a>  {
-    fn xy(axes: &'a Axes, x: &'a impl Vector<f64>, y: &'a impl Vector<f64>) -> Self {
-        Self {
-            axes,
-            options: PlotOptions::new(),
-            data: PlotData::XY(x, y),
-        }
+    fn xy(
+        axes: &'a Axes,
+        x: &'a (impl Vector<f64> + ?Sized),
+        y: &'a (impl Vector<f64> + ?Sized),
+    ) -> Self {
+        Python::attach(|py| {
+            let x = x.to_pyvector(py).unbind();
+            let y = y.to_pyvector(py).unbind();
+            Self {
+                axes,
+                options: PlotOptions::new(),
+                data: PlotData::XY(x, y),
+            }
+        })
     }
 
-    fn y(axes: &'a Axes, y: &'a impl Vector<f64>) -> Self {
-        Self {
-            axes,
-            options: PlotOptions::new(),
-            data: PlotData::Y(y),
-        }
+    fn y(axes: &'a Axes, y: &'a (impl Vector<f64> + ?Sized)) -> Self {
+        Python::attach(|py| {
+            let y = y.to_pyvector(py).unbind();
+            Self {
+                axes,
+                options: PlotOptions::new(),
+                data: PlotData::Y(y),
+            }
+        })
     }
 
     set_plotoptions!();
@@ -638,6 +650,7 @@ pub struct XYFrom<'a, I> {
     options: PlotOptions<'a>,
 }
 
+/// 2D coordinates of points.
 pub trait CoordXY {
     fn x(&self) -> f64;
     fn y(&self) -> f64;
@@ -724,9 +737,9 @@ where
             y.push(di.y());
         }
         Python::attach(|py| {
-            let x = x.to_pyarray(py);
-            let y = y.to_pyarray(py);
-            self.options.plot_xy(py, self.axes, x, y)
+            let x = x.to_pyvector(py);
+            let y = y.to_pyvector(py);
+            self.options.plot_xy(py, self.axes, &x, &y)
         })
     }
 }
@@ -768,9 +781,9 @@ where
         let x = s.x();
         let y = s.y();
         Python::attach(|py| {
-            let x = x.to_pyarray(py);
-            let y = y.to_pyarray(py);
-            self.options.plot_xy(py, self.axes, x, y)
+            let x = x.to_pyvector(py);
+            let y = y.to_pyvector(py);
+            self.options.plot_xy(py, self.axes, &x, &y)
         })
     }
 
@@ -789,8 +802,8 @@ where
 #[must_use]
 pub struct Scatter<'a> {
     axes: &'a Axes,
-    x: &'a dyn Vector<f64>,
-    y: &'a dyn Vector<f64>,
+    x: Py<PyArray1<f64>>,
+    y: Py<PyArray1<f64>>,
     // Optional arguments are different from other plot types.
     s: Option<&'a [f64]>,
     c: Option<ScatterColorMat<'a>>, // Slice of RGBA
@@ -812,14 +825,18 @@ pub struct Scatter<'a> {
 impl<'a> Scatter<'a> {
     fn new(
         axes: &'a Axes,
-        x: &'a dyn Vector<f64>,
-        y: &'a dyn Vector<f64>
+        x: &'a (impl Vector<f64> + ?Sized),
+        y: &'a (impl Vector<f64> + ?Sized),
     ) -> Self {
-        Self {
-            axes, x, y,
-            s: None, c: None, marker: None, cmap: None, norm: None,
-            vmin: None, vmax: None, alpha: None, linewidths: None,
-        }
+        Python::attach(|py| {
+            let x = x.to_pyvector(py).unbind();
+            let y = y.to_pyvector(py).unbind();
+            Self {
+                axes, x, y,
+                s: None, c: None, marker: None, cmap: None, norm: None,
+                vmin: None, vmax: None, alpha: None, linewidths: None,
+            }
+        })
     }
 
     /// The marker size in points² (typographic points are 1/72 in).
@@ -905,10 +922,8 @@ impl<'a> Scatter<'a> {
         py: Python<'py>,
         c: impl IntoPyObject<'py>,
     ) {
-        let xn = self.x.to_pyvector(py);
-        let yn = self.y.to_pyvector(py);
         self.axes.ax.call_method1(py, intern!(py, "scatter"),
-            (xn, yn, self.s, c, self.marker, self.cmap,
+            (&self.x, &self.y, self.s, c, self.marker, self.cmap,
                  self.norm, self.vmin, self.vmax, self.alpha,
                  self.linewidths))
             .unwrap();
@@ -957,10 +972,11 @@ impl<C: Color> ScatterColors for C {
     }
 }
 
+/// Options for [`Axes::bar`].
 pub struct Bar<'a> {
     axes: &'a Axes,
-    x: &'a dyn Vector<f64>, // FIXME: categorical data ?
-    height: &'a dyn Vector<f64>,
+    x: Py<PyArray1<f64>>, // FIXME: categorical data ?
+    height: Py<PyArray1<f64>>,
     width: f64, // FIXME: or array
     bottom: f64, // FIXME: or array
     align: BarAlign,
@@ -984,19 +1000,23 @@ pub enum BarAlign {
 impl<'a> Bar<'a> {
     fn new(
         axes: &'a Axes,
-        x: &'a impl Vector<f64>,
-        height: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
+        height: &'a (impl Vector<f64> + ?Sized),
     ) -> Self {
-        Self {
-            axes,
-            x: x,
-            height: height,
-            width: 0.8,
-            bottom: 0.,
-            align: BarAlign::Center,
-            color: None,  facecolor: None,  edgecolor: None,
-            linewidth: None,  tick_label: None,  label: None,
-        }
+        Python::attach(|py| {
+            let x = x.to_pyvector(py).unbind();
+            let height = height.to_pyvector(py).unbind();
+            Self {
+                axes,
+                x,
+                height,
+                width: 0.8,
+                bottom: 0.,
+                align: BarAlign::Center,
+                color: None,  facecolor: None,  edgecolor: None,
+                linewidth: None,  tick_label: None,  label: None,
+            }
+        })
     }
 
     pub fn width(mut self, w: f64) -> Self {
@@ -1046,8 +1066,6 @@ impl<'a> Bar<'a> {
 
     pub fn plot(self) {
         Python::attach(|py| {
-            let x = self.x.to_pyvector(py);
-            let height = self.height.to_pyvector(py);
             let align = match self.align {
                 BarAlign::Center => "center",
                 BarAlign::Edge => "edge",
@@ -1075,34 +1093,39 @@ impl<'a> Bar<'a> {
             // TODO: options
             self.axes.ax.bind(py)
                 .call_method(intern!(py, "bar"),
-                    (x, height, self.width, self.bottom),
+                    (self.x, self.height, self.width, self.bottom),
                     Some(&kwargs))
                 .unwrap();
         })
     }
 }
 
+/// Options for [`Axes::stem`].
 pub struct Stem<'a> {
     axes: &'a Axes,
-    x: &'a dyn Vector<f64>,
-    y: &'a dyn Vector<f64>,
+    x: Py<PyArray1<f64>>,
+    y: Py<PyArray1<f64>>,
     linefmt: &'a str, // FIXME: enum
     markerfmt: &'a str,
     basefmt: &'a str,
 }
 
 impl<'a> Stem<'a> {
-    fn new<>(
+    fn new(
         axes: &'a Axes,
-        x: &'a impl Vector<f64>,
-        y: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
+        y: &'a (impl Vector<f64> + ?Sized),
     ) -> Self {
-        Self {
-            axes, x, y,
-            linefmt: "C0-",
-            markerfmt: "o",
-            basefmt: "C3-",
-        }
+        Python::attach(|py| {
+            let x = x.to_pyvector(py).unbind();
+            let y = y.to_pyvector(py).unbind();
+            Self {
+                axes, x, y,
+                linefmt: "C0-",
+                markerfmt: "o",
+                basefmt: "C3-",
+            }
+        })
     }
 
     pub fn linefmt(mut self, fmt: &'a str) -> Self {
@@ -1122,26 +1145,25 @@ impl<'a> Stem<'a> {
 
     pub fn plot(self) {
         Python::attach(|py| {
-            let x = self.x.to_pyvector(py);
-            let y = self.y.to_pyvector(py);
             let kwargs = PyDict::new(py);
             kwargs.set_item("linefmt", self.linefmt).unwrap();
             kwargs.set_item("markerfmt", self.markerfmt).unwrap();
             kwargs.set_item("basefmt", self.basefmt).unwrap();
             self.axes.ax.bind(py)
                 .call_method(intern!(py, "stem"),
-                    (x, y),
+                    (self.x, self.y),
                     Some(&kwargs))
                 .unwrap();
         })
     }
 }
 
+/// Options for [`Axes::fill_between`].
 pub struct FillBetween<'a> {
     axes: &'a Axes,
-    x: &'a dyn Vector<f64>,
-    y1: &'a dyn Vector<f64>,
-    y2: &'a dyn Vector<f64>,
+    x: Py<PyArray1<f64>>,
+    y1: Py<PyArray1<f64>>,
+    y2: Py<PyArray1<f64>>,
     where_: Option<&'a [bool]>,
     interpolate: bool,
     step: Option<Step>,
@@ -1169,23 +1191,28 @@ impl Step {
 }
 
 impl<'a> FillBetween<'a> {
-    fn new<D0, D1, D2>(axes: &'a Axes, x: &'a D0, y1: &'a D1, y2: &'a D2) -> Self
-    where
-        D0: Vector<f64> + 'a,
-        D1: Vector<f64> + 'a,
-        D2: Vector<f64> + 'a,
-    {
-        Self {
-            axes,
-            x,
-            y1, // or f64
-            y2, // or f64
-            where_: None,
-            interpolate: false,
-            step: None,
-            alpha: None,
-            linewidth: None,
-        }
+    fn new(
+        axes: &'a Axes,
+        x: &'a (impl Vector<f64> + ?Sized),
+        y1: &'a (impl Vector<f64> + ?Sized),
+        y2: &'a (impl Vector<f64> + ?Sized),
+    ) -> Self {
+        Python::attach(|py| {
+            let x = x.to_pyvector(py).unbind();
+            let y1 = y1.to_pyvector(py).unbind();
+            let y2 = y2.to_pyvector(py).unbind();
+            Self {
+                axes,
+                x,
+                y1, // or f64
+                y2, // or f64
+                where_: None,
+                interpolate: false,
+                step: None,
+                alpha: None,
+                linewidth: None,
+            }
+        })
     }
 
     pub fn step(mut self, s: Step) -> Self {
@@ -1205,9 +1232,6 @@ impl<'a> FillBetween<'a> {
 
     pub fn plot(self) {
         Python::attach(|py| {
-            let x = self.x.to_pyvector(py);
-            let y1 = self.y1.to_pyvector(py);
-            let y2 = self.y2.to_pyvector(py);
             let step = self.step.map(Step::as_str);
             let kwargs = PyDict::new(py);
             if let Some(alpha) = self.alpha {
@@ -1218,16 +1242,18 @@ impl<'a> FillBetween<'a> {
             }
             self.axes.ax.bind(py)
                 .call_method(intern!(py, "fill_between"),
-                    (x, y1, y2, self.where_, self.interpolate, step),
+                    (self.x, self.y1, self.y2,
+                     self.where_, self.interpolate, step),
                     Some(&kwargs))
                 .unwrap();
         })
     }
 }
 
+/// Options for [`Axes::stack`].
 pub struct Stack<'a> {
     axes: &'a Axes,
-    x: &'a dyn Vector<f64>,
+    x: Py<PyArray1<f64>>,
     y: &'a Array2<f64>,
     // FIXME: there are optional arguments.
 }
@@ -1235,35 +1261,39 @@ pub struct Stack<'a> {
 impl<'a> Stack<'a> {
     fn new(
         axes: &'a Axes,
-        x: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
         y: &'a Array2<f64>,
     ) -> Self {
-        Self { axes, x, y }
+        Python::attach(|py| {
+            let x = x.to_pyvector(py).unbind();
+            Self { axes, x, y }
+        })
     }
 
     pub fn plot(self) {
         Python::attach(|py| {
-            let x = self.x.to_pyvector(py);
             let y = self.y.to_pyarray(py);
             self.axes.ax.bind(py)
                 .call_method(intern!(py, "stackplot"),
-                    (x, y),
+                    (self.x, y),
                     None)
                 .unwrap();
         })
     }
 }
 
+/// Options for [`Axes::stairs`].
 pub struct Stairs<'a> {
     axes: &'a Axes,
-    y: &'a dyn Vector<f64>,
-    edges: Option<&'a dyn Vector<f64>>,
+    y: Py<PyArray1<f64>>,
+    edges: Option<Py<PyArray1<f64>>>,
     orientation: Orientation,
     fill: bool,
     // FIXME: there are more optional arguments.
     linewidth: Option<f64>,
 }
 
+/// Orientation for [`Stairs::orientation`].
 #[derive(Debug, Clone, Copy)]
 pub enum Orientation {
     Horizontal,
@@ -1282,20 +1312,26 @@ impl Orientation {
 impl<'a> Stairs<'a> {
     fn new(
         axes: &'a Axes,
-        y: &'a impl Vector<f64>,
+        y: &'a (impl Vector<f64> + ?Sized),
     ) -> Self {
-        Self {
-            axes, y,
-            edges: None,
-            orientation: Orientation::Vertical,
-            fill: false,
-            linewidth: None,
-        }
+        Python::attach(|py| {
+            let y = y.to_pyvector(py).unbind();
+            Self {
+                axes, y,
+                edges: None,
+                orientation: Orientation::Vertical,
+                fill: false,
+                linewidth: None,
+            }
+        })
     }
 
     /// Define the x-axis positions of the steps.
-    pub fn edges(mut self, x: &'a impl Vector<f64>) -> Self {
-        self.edges = Some(x);
+    pub fn edges(mut self, x: &'a (impl Vector<f64> + ?Sized)) -> Self {
+        Python::attach(|py| {
+            let x = x.to_pyvector(py).unbind();
+            self.edges = Some(x);
+        });
         self
     }
 
@@ -1316,8 +1352,6 @@ impl<'a> Stairs<'a> {
 
     pub fn plot(self) {
         Python::attach(|py| {
-            let y = self.y.to_pyvector(py);
-            let edges = self.edges.map(|e| e.to_pyvector(py));
             let kwargs = PyDict::new(py);
             kwargs.set_item("orientation", self.orientation.as_str()).unwrap();
             kwargs.set_item("fill", self.fill).unwrap();
@@ -1326,13 +1360,16 @@ impl<'a> Stairs<'a> {
             }
             self.axes.ax.bind(py)
                 .call_method(intern!(py, "stairs"),
-                    (y, edges),
+                    (self.y, self.edges),
                     Some(&kwargs))
                 .unwrap();
         })
     }
 }
 
+/// Set of contour lines or filled regions.
+///
+/// Returned by [`Axes::contour`] and [`Axes::contour_fun`].
 pub struct QuadContourSet {
     contours: Py<PyAny>,
 }
@@ -1392,12 +1429,13 @@ macro_rules! set_contour_options {
     };
 }
 
+/// Options for [`Axes::contour`].
 #[must_use]
 pub struct Contour<'a> {
     axes: &'a Axes,
     options: PlotOptions<'a>,
-    x: &'a dyn Vector<f64>,
-    y: &'a dyn Vector<f64>,
+    x: Py<PyArray1<f64>>,
+    y: Py<PyArray1<f64>>,
     z: &'a ndarray::Array2<f64>,
     levels: Option<&'a [f64]>,
     colors: Option<Vec<[f64; 4]>>,
@@ -1407,14 +1445,18 @@ impl<'a> Contour<'a>
 {
     fn new(
         axes: &'a Axes,
-        x: &'a impl Vector<f64>,
-        y: &'a impl Vector<f64>,
+        x: &'a (impl Vector<f64> + ?Sized),
+        y: &'a (impl Vector<f64> + ?Sized),
         z: &'a ndarray::Array2<f64>,
     ) -> Self {
-        Self {
-            axes, options: PlotOptions::new(),
-            x, y, z, levels: None, colors: None,
-        }
+        Python::attach(|py| {
+            let x = x.to_pyvector(py).unbind();
+            let y = y.to_pyvector(py).unbind();
+            Self {
+                axes, options: PlotOptions::new(),
+                x, y, z, levels: None, colors: None,
+            }
+        })
     }
 
     set_plotoptions!();
@@ -1422,21 +1464,22 @@ impl<'a> Contour<'a>
 
     pub fn plot(&self) -> QuadContourSet {
         Python::attach(|py| {
-            let x = self.x.to_pyvector(py);
-            let y = self.y.to_pyvector(py);
             let z = self.z.to_pyarray(py);
             let mut opt = self.options.kwargs(py);
             self.update_dict(&mut opt);
             let contours = self
                 .axes
                 .ax
-                .call_method(py, intern!(py, "contour"), (x, y, z), Some(&opt))
+                .call_method(py, intern!(py, "contour"),
+                    (&self.x, &self.y, z),
+                    Some(&opt))
                 .unwrap();
             QuadContourSet { contours }
         })
     }
 }
 
+/// Options for [`Axes::contour_fun`].
 #[must_use]
 pub struct ContourFun<'a, F> {
     axes: &'a Axes,
@@ -1504,6 +1547,18 @@ where
 #[cfg(test)]
 mod test {
     use crate::figure::Figure;
+
+    #[test]
+    fn test_unsized() -> Result<(), crate::Error> {
+        let fig = Figure::new()?;
+        let [[mut ax]] = fig.subplots()?;
+        let x = [0., 1., 2., 3.];
+        // The slice `[f64]` is unsized.
+        ax.xy(&x[..], &x[..]).plot();
+        ax.y(&x[..]).plot();
+        fig.save().to_file("target/test_axes_unsized.pdf")?;
+        Ok(())
+    }
 
     #[test]
     fn test_get_xticklabels() -> Result<(), crate::Error> {
