@@ -148,12 +148,10 @@ impl Axes {
     /// use matplotlib::pyplot as plt;
     /// let (fig, [[mut ax]]) = plt::subplots()?;
     /// ax.xy_from(&[(1., 2.), (4., 2.), (2., 3.), (3., 4.)]).plot();
-    /// ax.xy_from([(1., 0.), (2., 3.), (3., 1.), (4., 3.)]).plot();
+    /// ax.xy_from((1..=4).map(f64::from).zip([0., 3., 1., 3.])).plot();
     /// fig.save().to_file("target/XY_from_plot.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    // FIXME: show an example combining iterators using `zip`.  The
-    // `covid` research project may serve as a source of inspiration.
     pub fn xy_from<'a, I>(&'a mut self, xy: I) -> XYFrom<'a, I>
     where
         I: IntoIterator,
