@@ -16,17 +16,17 @@ use crate::{Error, IntoError, RcParams};
 pub trait StyleSpec {
     /// Python styles may be specified by `str`, `dict`, `Path` or `list`.
     #[doc(hidden)]
-    fn into_py<'py>(&self, py: Python<'py>) -> impl IntoPyObject<'py>;
+    fn as_py<'py>(&self, py: Python<'py>) -> impl IntoPyObject<'py>;
 }
 
 impl StyleSpec for &str {
-    fn into_py<'py>(&self, py: Python<'py>) -> impl IntoPyObject<'py> {
+    fn as_py<'py>(&self, py: Python<'py>) -> impl IntoPyObject<'py> {
         PyString::new(py, self)
     }
 }
 
 impl StyleSpec for RcParams {
-    fn into_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
+    fn as_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
         &self.rc
     }
 }
@@ -34,7 +34,7 @@ impl StyleSpec for RcParams {
 
 pub fn using(style: impl StyleSpec) -> Result<(), Error> {
     Python::attach(|py| -> Result<_, Error> {
-        let style = style.into_py(py);
+        let style = style.as_py(py);
         py.import("matplotlib.style").unwrap()
             .getattr("use").unwrap()
             .call1((style,))

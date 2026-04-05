@@ -112,23 +112,23 @@ pub struct RcParams {
 
 /// Rust types that may be used as [`RcParams`] values.
 pub trait RcParamsValue {
-    fn into_py<'py>(&self, py: Python<'py>) -> impl IntoPyObject<'py>;
+    fn as_py<'py>(&self, py: Python<'py>) -> impl IntoPyObject<'py>;
 }
 
 impl RcParamsValue for &str {
-    fn into_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
+    fn as_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
         self
     }
 }
 
 impl RcParamsValue for usize {
-    fn into_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
+    fn as_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
         self
     }
 }
 
 impl RcParamsValue for f64 {
-    fn into_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
+    fn as_py<'py>(&self, _py: Python<'py>) -> impl IntoPyObject<'py> {
         self
     }
 }
@@ -150,9 +150,9 @@ impl RcParams {
     /// as when [`pyplot::figure`] is called.
     ///
     /// [RcParam]: https://matplotlib.org/stable/api/matplotlib_configuration_api.html#matplotlib.RcParams
-    pub fn set<'py>(&self, key: &str, value: impl RcParamsValue) -> Result<(), Error> {
+    pub fn set(&self, key: &str, value: impl RcParamsValue) -> Result<(), Error> {
         Python::attach(|py| -> Result<_, Error> {
-            self.rc.bind(py).set_item(key, value.into_py(py))
+            self.rc.bind(py).set_item(key, value.as_py(py))
                 .into_error(py)
         })
     }

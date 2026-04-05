@@ -48,7 +48,7 @@ impl<T: Element> Vector<T> for [T]
 impl<T: Element> Vector<T> for Array1<T>
 {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
-        <Self as ToPyArray>::to_pyarray(&self, py)
+        <Self as ToPyArray>::to_pyarray(self, py)
     }
 }
 
@@ -459,7 +459,7 @@ impl<'a> PlotOptions<'a> {
             animated: false,
             antialiased: true,
             color: None,
-            label: &"",
+            label: "",
             linewidth: None,
             markeredgewidth: None,
             markersize: None,
@@ -607,6 +607,7 @@ pub struct XY<'a> {
 }
 
 impl<'a> XY<'a>  {
+    #[allow(clippy::self_named_constructors)]
     fn xy(
         axes: &'a Axes,
         x: &'a (impl Vector<f64> + ?Sized),
@@ -946,11 +947,10 @@ where
     C: Color,
 {
     fn as_mat(&self) -> ndarray::Array2<f64> {
-        let colors = self.as_ref();
-        let n = colors.len();
+        let n = self.len();
         let mut c: Array2<f64> = ndarray::Array2::zeros((n, 4));
         for i in 0 .. n {
-            let ci = colors[i].rgba();
+            let ci = self[i].rgba();
             for j in 0 .. 4 {
                 c[(i,j)] = ci[j];
             }
