@@ -1,6 +1,6 @@
 /// Inspired from
 /// https://matplotlib.org/stable/plot_types/index.html#plot-types
-use matplotlib::{colors::Base, self as mpl, figure};
+use matplotlib::{self as mpl, colors::Base, figure};
 use ndarray::Array1;
 use rand::RngExt;
 
@@ -21,7 +21,6 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-
 fn plot_xy() -> anyhow::Result<()> {
     let f = |x: f64| 4. + (2. * x).sin();
     let x2: Vec<_> = (0..25).map(|i| 10. / 25. * i as f64).collect();
@@ -35,15 +34,15 @@ fn plot_xy() -> anyhow::Result<()> {
     let y2_below: Vec<_> = y2.map(|y| y - 2.5).collect();
     ax.xy(&x2, &y2_below).fmt("o-").linewidth(2.).plot();
 
-    ax.set_xlim(0., 8.)   .set_xticks((1..8).map(f64::from))
-        .set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    ax.set_xlim(0., 8.).set_xticks((1..8).map(f64::from));
+    ax.set_ylim(0., 8.).set_yticks((1..8).map(f64::from));
 
     fig.save().to_file(format!("{BASE}plot_xy.pdf"))?;
     Ok(())
 }
 
 fn scatter_xy() -> anyhow::Result<()> {
-    use rand_distr::{Normal, Distribution};
+    use rand_distr::{Distribution, Normal};
 
     fn vec<T>(mut f: impl FnMut() -> T) -> Vec<T> {
         (0..24).map(|_| f()).collect()
@@ -53,29 +52,40 @@ fn scatter_xy() -> anyhow::Result<()> {
     let n = Normal::new(0., 2.)?;
     let x = vec(|| 4. + n.sample(&mut rng));
     let y = vec(|| 4. + n.sample(&mut rng));
-    let sizes = vec(|| rng.random_range(15. .. 80.));
-    let colors = vec(|| rng.random_range(15 .. 80));
+    let sizes = vec(|| rng.random_range(15. ..80.));
+    let colors = vec(|| rng.random_range(15..80));
 
     let (fig, [[mut ax]]) = figure::subplots()?;
 
-    ax.scatter(&x, &y).s(&sizes).cm(&colors).vmin(0.).vmax(100.).plot();
+    ax.scatter(&x, &y)
+        .s(&sizes)
+        .cm(&colors)
+        .vmin(0.)
+        .vmax(100.)
+        .plot();
 
-    ax.set_xlim(0., 8.)   .set_xticks((1..8).map(f64::from))
-        .set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    ax.set_xlim(0., 8.).set_xticks((1..8).map(f64::from));
+    ax.set_ylim(0., 8.).set_yticks((1..8).map(f64::from));
     fig.save().to_file(format!("{BASE}scatter_xy.pdf"))?;
     Ok(())
 }
 
 fn bar() -> anyhow::Result<()> {
-    let x: Vec<_> = (0 .. 8).map(|x| 0.5 + x as f64).collect();
+    let x: Vec<_> = (0..8).map(|x| 0.5 + x as f64).collect();
     let y = [4.8, 5.5, 3.5, 4.6, 6.5, 6.6, 2.6, 3.0];
 
     let (fig, [[mut ax]]) = figure::subplots()?;
 
-    ax.bar(&x, &y).width(1.).edgecolor(Base::W).linewidth(0.7).plot();
+    ax.bar(&x, &y)
+        .width(1.)
+        .edgecolor(Base::W)
+        .linewidth(0.7)
+        .plot();
 
-    ax.set_xlim(0., 8.)   .set_xticks(Array1::range(1., 8., 1.))
-        .set_ylim(0., 8.) .set_yticks(Array1::range(1., 8., 1.));
+    ax.set_xlim(0., 8.);
+    ax.set_xticks(Array1::range(1., 8., 1.));
+    ax.set_ylim(0., 8.);
+    ax.set_yticks(Array1::range(1., 8., 1.));
     fig.save().to_file(format!("{BASE}bar.pdf"))?;
     Ok(())
 }
@@ -88,8 +98,8 @@ fn stem() -> anyhow::Result<()> {
 
     ax.stem(&x, &y).plot();
 
-    ax.set_xlim(0., 8.) .set_xticks(Array1::range(1., 8., 1.));
-    ax.set_ylim(0., 8.) .set_yticks(Array1::range(1., 8., 1.));
+    ax.set_xlim(0., 8.).set_xticks(Array1::range(1., 8., 1.));
+    ax.set_ylim(0., 8.).set_yticks(Array1::range(1., 8., 1.));
     fig.save().to_file(format!("{BASE}stem.pdf"))?;
     Ok(())
 }
@@ -97,22 +107,22 @@ fn stem() -> anyhow::Result<()> {
 fn fill_between() -> anyhow::Result<()> {
     let x = Array1::linspace(0., 8., 16);
     let mut rng = rand::rng();
-    let y1 = x.map(|&x| 3. + 4. * x / 8. + rng.random_range(0. .. 0.5));
-    let y2 = x.map(|&x| 1. + 2. * x / 8. + rng.random_range(0. .. 0.5));
+    let y1 = x.map(|&x| 3. + 4. * x / 8. + rng.random_range(0. ..0.5));
+    let y2 = x.map(|&x| 1. + 2. * x / 8. + rng.random_range(0. ..0.5));
 
     let (fig, [[mut ax]]) = figure::subplots()?;
 
     ax.fill_between(&x, &y1, &y2).alpha(0.5).plot();
     ax.xy(&x, &((y1 + y2) / 2.)).plot();
 
-    ax.set_xlim(0., 8.) .set_xticks((1..8).map(f64::from));
-    ax.set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    ax.set_xlim(0., 8.).set_xticks((1..8).map(f64::from));
+    ax.set_ylim(0., 8.).set_yticks((1..8).map(f64::from));
     fig.save().to_file(format!("{BASE}fill_between.pdf"))?;
     Ok(())
 }
 
 fn stackplot() -> anyhow::Result<()> {
-    use ndarray::{arr1, Axis, stack};
+    use ndarray::{Axis, arr1, stack};
 
     let x = Array1::range(0., 10., 2.);
     let ay = arr1(&[1., 1.25, 2., 2.75, 3.]);
@@ -124,8 +134,8 @@ fn stackplot() -> anyhow::Result<()> {
 
     ax.stack(&x, &y).plot();
 
-    ax.set_xlim(0., 8.) .set_xticks((1..8).map(f64::from));
-    ax.set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    ax.set_xlim(0., 8.).set_xticks((1..8).map(f64::from));
+    ax.set_ylim(0., 8.).set_yticks((1..8).map(f64::from));
     fig.save().to_file(format!("{BASE}stackplot.pdf"))?;
     Ok(())
 }
@@ -137,8 +147,8 @@ fn stairs() -> anyhow::Result<()> {
 
     ax.stairs(&y).linewidth(2.5).plot();
 
-    ax.set_xlim(0., 8.) .set_xticks((1..8).map(f64::from));
-    ax.set_ylim(0., 8.) .set_yticks((1..8).map(f64::from));
+    ax.set_xlim(0., 8.).set_xticks((1..8).map(f64::from));
+    ax.set_ylim(0., 8.).set_yticks((1..8).map(f64::from));
     fig.save().to_file(format!("{BASE}stairs.pdf"))?;
     Ok(())
 }

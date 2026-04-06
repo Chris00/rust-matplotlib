@@ -36,29 +36,45 @@ pub(crate) fn py(py: Python<'_>, c: impl Color) -> Bound<'_, PyTuple> {
 
 impl Color for [f64; 3] {
     fn rgba(&self) -> [f64; 4] {
-        [self[0].clamp(0., 1.), self[1].clamp(0., 1.),
-            self[2].clamp(0., 1.), 1.]
+        [
+            self[0].clamp(0., 1.),
+            self[1].clamp(0., 1.),
+            self[2].clamp(0., 1.),
+            1.,
+        ]
     }
 }
 
 impl Color for [f64; 4] {
     fn rgba(&self) -> [f64; 4] {
-        [self[0].clamp(0., 1.), self[1].clamp(0., 1.),
-            self[2].clamp(0., 1.), self[3].clamp(0., 1.)]
+        [
+            self[0].clamp(0., 1.),
+            self[1].clamp(0., 1.),
+            self[2].clamp(0., 1.),
+            self[3].clamp(0., 1.),
+        ]
     }
 }
 
 impl Color for [u8; 3] {
     fn rgba(&self) -> [f64; 4] {
-        [self[0] as f64 / 255., self[1] as f64 / 255.,
-            self[2] as f64 / 255., 1.]
+        [
+            self[0] as f64 / 255.,
+            self[1] as f64 / 255.,
+            self[2] as f64 / 255.,
+            1.,
+        ]
     }
 }
 
 impl Color for [u8; 4] {
     fn rgba(&self) -> [f64; 4] {
-        [self[0] as f64 / 255., self[1] as f64 / 255.,
-            self[2] as f64 / 255., self[3] as f64 / 255.]
+        [
+            self[0] as f64 / 255.,
+            self[1] as f64 / 255.,
+            self[2] as f64 / 255.,
+            self[3] as f64 / 255.,
+        ]
     }
 }
 

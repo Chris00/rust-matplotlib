@@ -1,9 +1,7 @@
 //! 2D [lines](https://matplotlib.org/stable/api/lines_api.html) with
 //! support for a variety of line styles, markers, colors, etc.
 
-use crate::{
-    colors::{self, Color},
-};
+use crate::colors::{self, Color};
 use pyo3::{intern, prelude::*, types::PyDict};
 
 include!("macros.rs");

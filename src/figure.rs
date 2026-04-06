@@ -1,13 +1,8 @@
 //! [`Figure`] and `SubFigure` objects.
 
-use crate::{axes::Axes, Error, IntoError};
+use crate::{Error, IntoError, axes::Axes};
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
-use pyo3::{
-    intern,
-    prelude::*,
-    sync::PyOnceLock,
-    types::PyDict,
-};
+use pyo3::{intern, prelude::*, sync::PyOnceLock, types::PyDict};
 use std::path::Path;
 
 include!("macros.rs");
@@ -20,15 +15,17 @@ pub struct Figure {
 
 /// Convenience function returning a [`Figure`] and subplots (the
 /// number of which is determined by the size of the array).
-pub fn subplots<const R: usize, const C: usize>(
-) -> Result<(Figure, [[Axes; C]; R]), Error> {
+pub fn subplots<const R: usize, const C: usize>()
+-> Result<(Figure, [[Axes; C]; R]), Error> {
     let fig = Figure::new()?;
     let sp = fig.subplots()?;
     Ok((fig, sp))
 }
 
 #[inline(always)]
-fn grid<const R: usize, const C: usize, U>(f: impl Fn(usize, usize) -> U) -> [[U; C]; R] {
+fn grid<const R: usize, const C: usize, U>(
+    f: impl Fn(usize, usize) -> U
+) -> [[U; C]; R] {
     let mut r = 0;
     [(); R].map(|_| {
         let mut c = 0;
@@ -56,15 +53,15 @@ impl Figure {
     /// [saved][Figure::save] to files.
     pub fn new() -> Result<Figure, Error> {
         Python::attach(|py| {
-            let fig = Self::cls(py).call0()
-                .expect("New Figure")
-                .unbind();
+            let fig = Self::cls(py).call0().expect("New Figure").unbind();
             Ok(Self { fig })
         })
     }
 
     /// Return a grid of subplots with `R` rows and `C` columns.
-    pub fn subplots<const R: usize, const C: usize>(&self) -> Result<[[Axes; C]; R], Error> {
+    pub fn subplots<const R: usize, const C: usize>(
+        &self
+    ) -> Result<[[Axes; C]; R], Error> {
         Python::attach(|py| {
             let axs = self.fig.bind(py)
                 .call_method1("subplots", (R, C)).into_error(py)?;
@@ -163,7 +160,11 @@ impl<'a> Savefig<'a> {
                 kwargs.set_item("dpi", dpi).unwrap()
             }
             self.fig
-                .call_method(py, intern!(py, "savefig"), (path.as_ref(),), Some(&kwargs))
+                .call_method(
+                    py,
+                    intern!(py, "savefig"),
+                    (path.as_ref(),),
+                    Some(&kwargs))
                 .into_error(py)
         })?;
         Ok(())

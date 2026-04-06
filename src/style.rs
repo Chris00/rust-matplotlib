@@ -5,12 +5,12 @@
 //! `rcParams`](https://matplotlib.org/stable/users/explain/customizing.html#customizing) describes
 //! the mechanism and usage of styles.
 
+use crate::{Error, IntoError, RcParams};
 use pyo3::{
-    conversion::IntoPyObject,
     Python,
+    conversion::IntoPyObject,
     types::{PyAnyMethods, PyString},
 };
-use crate::{Error, IntoError, RcParams};
 
 /// Types that may be used as a parameter to [`using`].
 pub trait StyleSpec {
@@ -30,7 +30,6 @@ impl StyleSpec for RcParams {
         &self.rc
     }
 }
-
 
 pub fn using(style: impl StyleSpec) -> Result<(), Error> {
     Python::attach(|py| -> Result<_, Error> {

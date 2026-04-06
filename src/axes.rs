@@ -9,13 +9,13 @@ use crate::{
     lines::Line2D,
     text::Text,
 };
+use ndarray::{Array1, Array2};
 use numpy::{Element, PyArray1, convert::ToPyArray};
 use pyo3::{
     intern,
     prelude::*,
     types::{PyDict, PyList, PyTuple},
 };
-use ndarray::{Array1, Array2};
 use std::marker::PhantomData;
 
 #[cfg(feature = "curve-sampling")]
@@ -38,15 +38,13 @@ pub trait Vector<T: Element> {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T>;
 }
 
-impl<T: Element> Vector<T> for [T]
-{
+impl<T: Element> Vector<T> for [T] {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
         PyArray1::from_slice(py, self)
     }
 }
 
-impl<T: Element> Vector<T> for Array1<T>
-{
+impl<T: Element> Vector<T> for Array1<T> {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
         <Self as ToPyArray>::to_pyarray(self, py)
     }
@@ -75,20 +73,17 @@ where
                 }
             }
             vec
-
         }
     }
 }
 
-impl<T: Element> Vector<T> for Vec<T>
-{
+impl<T: Element> Vector<T> for Vec<T> {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
         PyArray1::from_slice(py, self)
     }
 }
 
-impl<T: Element, const N: usize> Vector<T> for [T; N]
-{
+impl<T: Element, const N: usize> Vector<T> for [T; N] {
     fn to_pyvector<'py>(&self, py: Python<'py>) -> PyVector<'py, T> {
         PyArray1::from_slice(py, self)
     }
@@ -207,7 +202,7 @@ impl Axes {
         &'a mut self,
         x: &'a (impl Vector<f64> + ?Sized),
         y: &'a (impl Vector<f64> + ?Sized),
-        z: &'a ndarray::Array2<f64>
+        z: &'a ndarray::Array2<f64>,
     ) -> Contour<'a> {
         Contour::new(self, x, y, z)
     }
@@ -226,7 +221,12 @@ impl Axes {
     /// fig.save().to_file("target/contour_fun.pdf")?;
     /// # Ok::<(), matplotlib::Error>(())
     /// ```
-    pub fn contour_fun<'a, F>(&'a mut self, ab: [f64; 2], cd: [f64; 2], f: F) -> ContourFun<'a, F>
+    pub fn contour_fun<'a, F>(
+        &'a mut self,
+        ab: [f64; 2],
+        cd: [f64; 2],
+        f: F,
+    ) -> ContourFun<'a, F>
     where
         F: FnMut(f64, f64) -> f64,
     {
@@ -403,7 +403,9 @@ impl Axes {
 
     pub fn get_xticklabels(&mut self) -> Vec<Text> {
         Python::attach(|py| {
-            let labels: Vec<_> = self.ax.bind(py)
+            let labels: Vec<_> = self
+                .ax
+                .bind(py)
                 .call_method1(intern!(py, "get_xticklabels"), ())
                 .unwrap()
                 .extract()
@@ -521,19 +523,10 @@ impl<'a> PlotOptions<'a> {
         Line2D { line2d }
     }
 
-    fn plot_data(
-        &self,
-        py: Python,
-        axes: &Axes,
-        data: PlotData,
-    ) -> Line2D {
+    fn plot_data(&self, py: Python, axes: &Axes, data: PlotData) -> Line2D {
         match data {
-            PlotData::XY(x, y) => {
-                self.plot_xy(py, axes, x.bind(py), y.bind(py))
-            }
-            PlotData::Y(y) => {
-                self.plot_y(py, axes, y.bind(py))
-            }
+            PlotData::XY(x, y) => self.plot_xy(py, axes, x.bind(py), y.bind(py)),
+            PlotData::Y(y) => self.plot_y(py, axes, y.bind(py)),
         }
     }
 }
@@ -604,7 +597,7 @@ pub struct XY<'a> {
     options: PlotOptions<'a>,
 }
 
-impl<'a> XY<'a>  {
+impl<'a> XY<'a> {
     #[allow(clippy::self_named_constructors)]
     fn xy(
         axes: &'a Axes,
@@ -903,16 +896,14 @@ impl<'a> Scatter<'a> {
     pub fn plot(self) {
         // FIXME: Do we want to check that `x` and `y` have the same
         // dimension?  Better error message?
-        Python::attach(|py| {
-            match self.c {
-                Some(ScatterColorMat::Cmap(v)) => {
-                    self.plot_with_colors(py, v.to_pyarray(py));
-                }
-                Some(ScatterColorMat::Colors(ref m)) => {
-                    self.plot_with_colors(py, m.to_pyarray(py));
-                }
-                None => self.plot_with_colors(py, None::<&str>),
+        Python::attach(|py| match self.c {
+            Some(ScatterColorMat::Cmap(v)) => {
+                self.plot_with_colors(py, v.to_pyarray(py));
             }
+            Some(ScatterColorMat::Colors(ref m)) => {
+                self.plot_with_colors(py, m.to_pyarray(py));
+            }
+            None => self.plot_with_colors(py, None::<&str>),
         })
     }
 
@@ -947,10 +938,10 @@ where
     fn as_mat(&self) -> ndarray::Array2<f64> {
         let n = self.len();
         let mut c: Array2<f64> = ndarray::Array2::zeros((n, 4));
-        for i in 0 .. n {
+        for i in 0..n {
             let ci = self[i].rgba();
-            for j in 0 .. 4 {
-                c[(i,j)] = ci[j];
+            for j in 0..4 {
+                c[(i, j)] = ci[j];
             }
         }
         c
@@ -962,10 +953,10 @@ impl<C: Color> ScatterColors for C {
         // A single row array gives the same color for all markers.
         let mut c = ndarray::Array2::zeros((1, 4));
         let color = self.rgba();
-        c[(0,0)] = color[0];
-        c[(0,1)] = color[1];
-        c[(0,2)] = color[2];
-        c[(0,3)] = color[3];
+        c[(0, 0)] = color[0];
+        c[(0, 1)] = color[1];
+        c[(0, 2)] = color[2];
+        c[(0, 3)] = color[3];
         c
     }
 }
@@ -1308,10 +1299,7 @@ impl Orientation {
 }
 
 impl<'a> Stairs<'a> {
-    fn new(
-        axes: &'a Axes,
-        y: &'a (impl Vector<f64> + ?Sized),
-    ) -> Self {
+    fn new(axes: &'a Axes, y: &'a (impl Vector<f64> + ?Sized)) -> Self {
         Python::attach(|py| {
             let y = y.to_pyvector(py).unbind();
             Self {
@@ -1374,7 +1362,9 @@ pub struct QuadContourSet {
 
 impl QuadContourSet {
     pub fn set_color(&mut self, c: impl Color) -> &mut Self {
-        Python::attach(|py| meth!(self.contours, set_color, (colors::py(py, c),)).unwrap());
+        Python::attach(|py| {
+            meth!(self.contours, set_color, (colors::py(py, c),)).unwrap()
+        });
         self
     }
 }
@@ -1439,8 +1429,7 @@ pub struct Contour<'a> {
     colors: Option<Vec<[f64; 4]>>,
 }
 
-impl<'a> Contour<'a>
-{
+impl<'a> Contour<'a> {
     fn new(
         axes: &'a Axes,
         x: &'a (impl Vector<f64> + ?Sized),
@@ -1465,9 +1454,7 @@ impl<'a> Contour<'a>
             let z = self.z.to_pyarray(py);
             let mut opt = self.options.kwargs(py);
             self.update_dict(&mut opt);
-            let contours = self
-                .axes
-                .ax
+            let contours = self.axes.ax
                 .call_method(py, intern!(py, "contour"),
                     (&self.x, &self.y, z),
                     Some(&opt))
@@ -1574,8 +1561,7 @@ mod test {
     fn test_minorticks_on() -> Result<(), crate::Error> {
         let fig = Figure::new()?;
         let [[mut ax]] = fig.subplots()?;
-        ax.minorticks_on()
-            .grid();
+        ax.minorticks_on().grid();
         ax.xy(&[0., 1.], &[0., 1.]).plot();
         fig.save().to_file("target/test_minorticks_on.pdf")?;
         Ok(())

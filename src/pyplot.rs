@@ -13,10 +13,8 @@
 //! # Ok::<(), matplotlib::Error>(())
 //! ```
 
-use pyo3::{
-    prelude::*, sync::PyOnceLock,
-};
-use crate::{axes::Axes, Error, figure::Figure, IntoError};
+use crate::{Error, IntoError, axes::Axes, figure::Figure};
+use pyo3::{prelude::*, sync::PyOnceLock};
 
 // RuntimeWarning: More than 20 figures have been opened. Figures
 // created through the pyplot interface (`matplotlib.pyplot.figure`)
@@ -38,8 +36,8 @@ pub fn figure() -> Result<Figure, Error> {
 }
 
 /// Return a figure and a grid of subplots with `R` rows and `C` columns.
-pub fn subplots<const R: usize, const C: usize>(
-) -> Result<(Figure, [[Axes; C]; R]), Error> {
+pub fn subplots<const R: usize, const C: usize>()
+-> Result<(Figure, [[Axes; C]; R]), Error> {
     let fig = figure()?;
     let ax = fig.subplots()?;
     Ok((fig, ax))

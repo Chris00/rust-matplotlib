@@ -9,20 +9,18 @@
 //! [Rust]: https://www.rust-lang.org/
 //! [Matplotlib]: https://matplotlib.org/
 
-use std::{
-    fmt::{Display, Formatter},
-};
 use pyo3::{
-    exceptions::{PyFileNotFoundError, PyValueError, PyPermissionError},
+    exceptions::{PyFileNotFoundError, PyPermissionError, PyValueError},
     intern,
     prelude::*,
-    types::PyDict,
     sync::PyOnceLock,
+    types::PyDict,
 };
+use std::fmt::{Display, Formatter};
 
+pub mod axes;
 pub mod colors;
 pub mod figure;
-pub mod axes;
 pub mod lines;
 pub mod pyplot;
 pub mod style;
@@ -138,9 +136,7 @@ impl RcParamsValue for f64 {
 impl RcParams {
     pub fn get(&self, key: &str) -> Option<Py<PyAny>> {
         Python::attach(|py| {
-            self.rc.bind(py).get_item(key)
-                .unwrap()
-                .map(|o| o.unbind())
+            self.rc.bind(py).get_item(key).unwrap().map(|o| o.unbind())
         })
     }
 
@@ -179,17 +175,18 @@ pub fn rc_params() -> &'static RcParams {
     static RCPARAMS: PyOnceLock<RcParams> = PyOnceLock::new();
     Python::attach(|py| {
         RCPARAMS.get_or_init(py, || {
-            let rc = py.import("matplotlib")
+            let rc = py
+                .import("matplotlib")
                 .expect("Cannot find matplotlib")
                 .getattr("rcParams")
                 .expect("Cannot find matplotlib.rcParams")
-                .cast_into::<PyDict>().unwrap();
+                .cast_into::<PyDict>()
+                .unwrap();
             RcParams { rc: rc.unbind() }
         });
         RCPARAMS.get(py).unwrap()
     })
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -263,7 +260,6 @@ mod tests {
         fig.save().to_file("target/data_in_scope.pdf")?;
         Ok(())
     }
-
 }
 
 #[cfg(doctest)]

@@ -1,7 +1,7 @@
 // Inspired by https://gitlab.com/whooie/mpl/-/blob/master/README.md?ref_type=heads#example
 
-use std::{error, f64::consts::TAU};
 use matplotlib::{self as mpl, pyplot as plt};
+use std::{error, f64::consts::TAU};
 
 fn main() -> Result<(), Box<dyn error::Error>> {
     // Remark: `ax.fun` is easier (and more efficient) for plotting functions.
@@ -18,10 +18,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         .fmt("ob-")
         .label("$\\sin(x)$")
         .plot();
-    ax.xy_from(x.zip(y2))
-        .fmt("Dr-")
-        .label("$\\cos(x)$")
-        .plot();
+    ax.xy_from(x.zip(y2)).fmt("Dr-").label("$\\cos(x)$").plot();
     ax.legend([]);
     plt::show();
 
