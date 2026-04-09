@@ -3,7 +3,7 @@
 use crate::{Error, IntoError, axes::Axes};
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{intern, prelude::*, sync::PyOnceLock, types::PyDict};
-use std::path::Path;
+use std::{array, path::Path};
 
 include!("macros.rs");
 
@@ -26,16 +26,8 @@ pub fn subplots<const R: usize, const C: usize>()
 fn grid<const R: usize, const C: usize, U>(
     f: impl Fn(usize, usize) -> U
 ) -> [[U; C]; R] {
-    let mut r = 0;
-    [(); R].map(|_| {
-        let mut c = 0;
-        let row = [(); C].map(|_| {
-            let y = f(r, c);
-            c += 1;
-            y
-        });
-        r += 1;
-        row
+    array::from_fn(|r| {
+        array::from_fn(|c| f(r, c))
     })
 }
 
