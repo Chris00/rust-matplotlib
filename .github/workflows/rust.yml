@@ -31,21 +31,39 @@ jobs:
           - build: win64
             os: windows-latest
             rust: stable
+          - build: anaconda win64
+            os: windows-latest
+            rust: stable
     steps:
     - uses: actions/checkout@master
     - uses: actions/setup-python@v6
       with:
-        python-version: '3.12'
+        python-version: '3.14'
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - name: Install Matplotlib (pip)
       run: python3 -m pip install -U matplotlib
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - name: Setup Miniconda
-      uses: conda-incubator/setup-miniconda@v3
-      if: startsWith(matrix.build, 'anaconda macos')
-    - name: Install Matplotlib (Anaconda)
-      run: $CONDA/bin/conda install conda-forge::matplotlib
       if: startsWith(matrix.build, 'anaconda')
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        channels: defaults
+        miniconda-version: "latest"
+    - name: Install Matplotlib (Anaconda)
+      if: ${{ matrix.os != 'windows-latest' && startsWith(matrix.build, 'anaconda') }}
+      shell: bash
+      run: conda install -y -c conda-forge matplotlib
+    - name: Install Matplotlib (Anaconda, Windows)
+      if: ${{ matrix.os == 'windows-latest' && startsWith(matrix.build, 'anaconda') }}
+      shell: pwsh
+      run: conda install -y -c conda-forge matplotlib
+    - name: Diagnose Python used (Windows)
+      if: ${{ matrix.os == 'windows-latest' }}
+      shell: pwsh
+      run: |
+        python -c "import sys, platform; print(sys.executable); print(sys.version); print(platform.platform())"
+        python -c "import numpy, matplotlib; print('numpy', numpy.__version__); print('matplotlib', matplotlib.__version__)"
+
     - name: Install Rust ${{ matrix.rust }}
       uses: dtolnay/rust-toolchain@stable
       with:
@@ -54,13 +72,21 @@ jobs:
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - run: cargo test
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
+      env:
+        MPLBACKEND: Agg
+        MPLCONFIGDIR: ${{ runner.temp }}/mplconfig
+        PYTHONUTF8: "1"
     - run: cargo run --example a_simple_example
       if: ${{ ! startsWith(matrix.build, 'anaconda') }}
     - name: Run example with Anaconda
-      if: startsWith(matrix.build, 'anaconda')
+      if: ${{ matrix.os != 'windows-latest' && startsWith(matrix.build, 'anaconda') }}
       shell: bash
       run: |
         eval "$($CONDA/bin/conda shell.bash activate)"
         mkdir -p target/debug/deps
         ln -s $CONDA_PREFIX/lib/libpython* target/debug/deps
         cargo run --example a_simple_example
+    - name: Run example with Anaconda (Windows)
+      if: ${{ matrix.os == 'windows-latest' && startsWith(matrix.build, 'anaconda') }}
+      shell: pwsh
+      run: cargo run --example a_simple_example
