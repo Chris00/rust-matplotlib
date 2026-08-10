@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let x_col = df.column("Pseudacorus_Sepal_Length")?.f64()?;
     let y_col = df.column("Pseudacorus_Sepal_width")?.f64()?;
 
-    ax.xy_from(x_col.iter().zip(y_col)).fmt(".").plot();
+    ax.xy_from(x_col.iter().zip(y_col.iter())).fmt(".").plot();
     fig.save().to_file("flower.png")?;
     Ok(())
 }

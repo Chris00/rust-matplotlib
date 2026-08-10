@@ -10,18 +10,18 @@ documentation = "https://docs.rs/matplotlib"
 license = "MIT"
 keywords = ["plot", "graph", "curve", "surface"]
 categories = ["science", "visualization", "mathematics", "graphics"]
-rust-version = "1.85"
+rust-version = "1.87"
 
 [dependencies]
-nalgebra = { version = ">=0.30, <0.35", default-features = false, optional = true }
-numpy = "0.28.0"
+nalgebra = { version = "0.35.0", default-features = false, optional = true }
+numpy = "0.29.0"
 #numpy = { version = "0.28", git = "https://github.com/Chris00/rust-numpy.git" }
 ndarray = "0.17.2"
 curve-sampling = { version = "0.6", optional = true }
 num-complex = { version = "0.4.6", optional = true }
 
 [dependencies.pyo3]
-version = "0.28.2"
+version = "0.29.2"
 features = ["auto-initialize"]
 
 [features]
@@ -30,9 +30,9 @@ nalgebra = ["dep:nalgebra", "numpy/nalgebra"]
 
 [dev-dependencies]
 doc-comment = "0.3.4"
-polars-core = { version = "0.53.0", features = ["fmt"] }
+polars-core = { version = "0.54.3", features = ["fmt"] }
 anyhow = "1.0.102"
-rand = "0.10.0"
+rand = "0.10.1"
 rand_distr = "=0.6.0"
 
 [package.metadata.docs.rs]
