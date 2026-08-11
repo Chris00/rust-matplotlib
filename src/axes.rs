@@ -307,6 +307,13 @@ impl Axes {
         meth!(self.ax, set_title, (txt.as_ref(),)).unwrap();
         self
     }
+    
+    /// Set the xaxis' scale.  Possible values for `v` are "linear",
+    /// "log", "symlog", "logit",...
+    pub fn set_xscale(&mut self, v: &str) -> &mut Self {
+        meth!(self.ax, set_xscale, (v,)).unwrap();
+        self
+    }
 
     /// Set the yaxis' scale.  Possible values for `v` are "linear",
     /// "log", "symlog", "logit",...
